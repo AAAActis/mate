@@ -10,9 +10,9 @@
 ---
 
 ## Resumen de Progreso Actual
-- **Fase Actual:** Fase 1 (Las 8 Herramientas, Agente con Tool Calling + Fallback y Calendario .ics)
-- **Último Commit Verificado:** Fase 0 - Esqueleto Python 3.12, SQLite con Aislamiento BOLA y Seguridad Base
-- **Estado del Verificador:** APTO (Fase 0)
+- **Fase Actual:** Fase 2 (API FastAPI, Proactividad por SSE, Rate Limiting y Cabeceras)
+- **Último Commit Verificado:** Fase 1 - Las 8 Herramientas, Agente con Tool Calling + Fallback y Calendario .ics
+- **Estado del Verificador:** APTO (Fase 1)
 - **Bloqueos / Dudas para Santiago:** Ninguno
 
 ---
@@ -33,13 +33,13 @@
 - [x] **0.6. [GATE]** Invocar al subagente **`verificador`** sobre la Fase 0. Solo avanzar si devuelve **APTO**. → **VEREDICTO: APTO** (26/26 tests pasan, mutación BOLA detectada, PII redacción verificada, SQLite WAL + FK ON).
 
 ### FASE 1: Las 8 Herramientas (`tools.py`), Agente con Tool Calling + Fallback y Calendario `.ics`
-- [ ] **1.1.** Crear `src/mate_api/tools.py` con la implementación real sobre SQLite de las 8 herramientas: `crear_tarea`, `listar_hoy`, `crear_habito`, `registrar_cumplimiento`, `buscar_hueco`, `reservar_bloque`, `crear_recordatorio` y `guardar_dato`.
-- [ ] **1.2.** Crear `src/mate_api/agent.py` con:
+- [x] **1.1.** Crear `src/mate_api/tools.py` con la implementación real sobre SQLite de las 8 herramientas: `crear_tarea`, `listar_hoy`, `crear_habito`, `registrar_cumplimiento`, `buscar_hueco`, `reservar_bloque`, `crear_recordatorio` y `guardar_dato`.
+- [x] **1.2.** Crear `src/mate_api/agent.py` con:
   - Cliente HTTP hacia Gemini (API compatible con OpenAI) con timeout corto, límite estricto de **máximo 4 llamadas a herramientas por turno** (`MAX_TOOL_CALLS_PER_TURN = 4`), envoltura anti-Prompt Injection (`<user_data>`) y soporte de tonos (`amable` y `firme` con límites éticos).
   - Modo degradado (`RuleBasedFallbackAgent`): si no hay API Key, si falla la red o si el presupuesto de tokens se agotó, ejecuta las herramientas reales para los flujos de gym, estudio y cumpleaños y responde sin error 500, devolviendo el estado del avatar (`neutro`, `hablando`, `contento`, `serio`).
-- [ ] **1.3.** Crear `src/mate_api/ics_builder.py` que genere un archivo iCalendar (`.ics` RFC 5545) válido a partir de los `calendar_blocks` y tareas con hora de la sesión, más rotación/revocación del `ics_token`.
-- [ ] **1.4.** Crear `tests/test_tools_and_agent.py` probando las 8 herramientas, el corte del bucle si el modelo pide más de 4 tool calls, los flujos de gym/estudio/cumpleaños en modo degradado y la validez del archivo `.ics`.
-- [ ] **1.5. [GATE]** Invocar al subagente **`verificador`** sobre la Fase 1. Solo avanzar si devuelve **APTO**.
+- [x] **1.3.** Crear `src/mate_api/ics_builder.py` que genere un archivo iCalendar (`.ics` RFC 5545) válido a partir de los `calendar_blocks` y tareas con hora de la sesión, más rotación/revocación del `ics_token`.
+- [x] **1.4.** Crear `tests/test_tools_and_agent.py` probando las 8 herramientas, el corte del bucle si el modelo pide más de 4 tool calls, los flujos de gym/estudio/cumpleaños en modo degradado y la validez del archivo `.ics`.
+- [x] **1.5. [GATE]** Invocar al subagente **`verificador`** sobre la Fase 1. Solo avanzar si devuelve **APTO**. → **VEREDICTO: APTO** (30/30 tests pasan, mutación BOLA detectada en `complete_task`, mutación Tool Calling Limit detectada con hardcodeo `EXPECTED_MAX_TOOL_CALLS=4`, mutación PII detectada en CBU, line folding RFC 5545 ≤75 chars verificado, ToolResult con success/error/data, sin SQL directo desde LLM).
 
 ### FASE 2: API FastAPI, Proactividad por SSE (`scheduler.py`), Rate Limiting y Cabeceras
 - [ ] **2.1.** Crear `src/mate_api/scheduler.py` (loop asíncrono y despachador de eventos SSE por sesión) que evalúe reglas proactivas (hábito pendiente, bloque de estudio próximo, cumpleaños dentro de 7 días) y permita disparar los 3 escenarios bajo demanda.
@@ -75,3 +75,4 @@
 |---|---|---|---|---|
 | 14/11/2026 | Inicialización | - | - | Creados archivos de contexto ("Warm Yerba") y `ESTADO.md`. Listo para arrancar Fase 0. |
 | 14/11/2026 | Fase 0 | (commit pendiente) | **APTO** | 26/26 tests pasan. Fixes aplicados a 5 queries en `database.py` (complete_task, get_task, complete_habit, get_habit, get_block) para filtrar por session_id. Mutación BOLA detectada: test `test_task_created_in_session_a_not_visible_in_session_b` falla si se elimina filtro. PII redacción verificada para CBU (16/20/22 dígitos), DNI/CUIT/CUIL, emails, teléfonos AR. SQLite WAL + FK ON confirmado. Próximo: Fase 1 (tools.py, agent.py, ics_builder.py). |
+| 14/11/2026 | Fase 1 | (commit pendiente) | **APTO** | 56/56 tests totales pasan (26 Fase 0 + 30 Fase 1). Mutación BOLA detectada en `complete_task` (session_id filter). Mutación Tool Calling Limit detectada: test `test_max_tool_calls_limit` usa `EXPECTED_MAX_TOOL_CALLS=4` hardcodeado y falla si se cambia `MAX_TOOL_CALLS_PER_TURN` a 10. Mutación PII detectada: comentando regex CBU falla `test_guardar_dato_redacta_pii`. Line folding RFC 5545 ≤75 chars verificado. ToolResult incluye success/error/data. Sin SQL directo desde LLM. Próximo: Fase 2 (main.py, scheduler.py, API endpoints, security headers). |

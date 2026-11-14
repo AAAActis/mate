@@ -172,6 +172,18 @@ class ChatRequest(BaseModel):
     message: ChatMessageStr
 
 
+class ToolCall(BaseModel):
+    id: str
+    name: str
+    arguments: dict
+
+
+class ToolResult(BaseModel):
+    name: str
+    success: bool
+    result: Optional[dict] = None
+
+
 class ToolExecuted(BaseModel):
     name: str
     args: dict
@@ -181,7 +193,7 @@ class ToolExecuted(BaseModel):
 class ChatResponse(BaseModel):
     reply: str
     avatar_state: AvatarState
-    tools_executed: list[ToolExecuted] = Field(default_factory=list)
+    tools_executed: list[ToolResult] = Field(default_factory=list)
     state_snapshot: dict = Field(default_factory=dict)
     is_degraded: bool = False
 

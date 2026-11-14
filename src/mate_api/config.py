@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # Token Budget (daily)
     DAILY_TOKEN_BUDGET: int = 50000
 
+    # Demo/Dev mode
+    DEMO_ENABLED: str = "false"  # "true" para habilitar LLM en tests sin API key real
+
     # Session
     SESSION_TTL_HOURS: int = 24
     SESSION_COOKIE_NAME: str = "mate_sid"
