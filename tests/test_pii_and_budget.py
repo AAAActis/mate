@@ -1,9 +1,9 @@
 import pytest
 import pytest_asyncio
 
-from src.mate_api.security import PiiRedactor, InMemoryTokenBudgetStore, InMemoryRateLimiter
-from src.mate_api.database import create_memory, list_memories
-from src.mate_api.config import get_settings
+from mate_api.security import PiiRedactor, InMemoryTokenBudgetStore, InMemoryRateLimiter
+from mate_api.database import create_memory, list_memories
+from mate_api.config import get_settings
 
 
 class TestPiiRedactor:

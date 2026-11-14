@@ -21,7 +21,7 @@ async def temp_db():
 
     # Reimportar módulos para que usen la nueva DB
     import importlib
-    from src.mate_api import database, config
+    from mate_api import database, config
     importlib.reload(config)
     importlib.reload(database)
     await database.init_db()
@@ -37,7 +37,7 @@ async def temp_db():
 
 @pytest_asyncio.fixture
 async def session_a(temp_db):
-    from src.mate_api.database import create_session
+    from mate_api.database import create_session
     import secrets
     sid = secrets.token_urlsafe(32)
     ics = secrets.token_urlsafe(32)
@@ -47,7 +47,7 @@ async def session_a(temp_db):
 
 @pytest_asyncio.fixture
 async def session_b(temp_db):
-    from src.mate_api.database import create_session
+    from mate_api.database import create_session
     import secrets
     sid = secrets.token_urlsafe(32)
     ics = secrets.token_urlsafe(32)

@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 from datetime import datetime, timezone, timedelta
 
-from src.mate_api.tools import (
+from mate_api.tools import (
     tool_crear_tarea,
     tool_listar_hoy,
     tool_crear_habito,
@@ -14,21 +14,21 @@ from src.mate_api.tools import (
     TOOL_DEFINITIONS,
     TOOL_MAP,
 )
-from src.mate_api.agent import (
+from mate_api.agent import (
     MateAgent,
     RuleBasedFallbackAgent,
     MAX_TOOL_CALLS_PER_TURN,
 )
-from src.mate_api.ics_builder import build_ics, build_reminder_ics
-from src.mate_api.models import Tone, Category
-from src.mate_api.database import (
+from mate_api.ics_builder import build_ics, build_reminder_ics
+from mate_api.models import Tone, Category
+from mate_api.database import (
     create_session,
     create_task,
     create_habit,
     create_calendar_block,
     list_tasks_today,
 )
-from src.mate_api.config import get_settings
+from mate_api.config import get_settings
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ async def session_fixture():
         mp.setenv("DEMO_ENABLED", "false")
 
         import importlib
-        from src.mate_api import database, config
+        from mate_api import database, config
         importlib.reload(config)
         importlib.reload(database)
         await database.init_db()
@@ -264,8 +264,8 @@ class TestAgent:
         import tempfile
         import importlib
         import json
-        from src.mate_api import database, config, agent
-        from src.mate_api.models import Tone, ToolCall
+        from mate_api import database, config, agent
+        from mate_api.models import Tone, ToolCall
 
         # Valor esperado hardcodeado para detectar mutaciones
         EXPECTED_MAX_TOOL_CALLS = 4
@@ -353,7 +353,7 @@ class TestIcsBuilder:
         assert "VERSION:2.0" in ics
 
     def test_build_ics_con_tareas(self):
-        from src.mate_api.models import TaskRead
+        from mate_api.models import TaskRead
         from datetime import datetime, timezone
 
         tasks = [
@@ -374,7 +374,7 @@ class TestIcsBuilder:
         assert "STATUS:NEEDS-ACTION" in ics
 
     def test_build_ics_con_bloques(self):
-        from src.mate_api.models import CalendarBlockRead, Category
+        from mate_api.models import CalendarBlockRead, Category
         from datetime import datetime, timezone, timedelta
 
         now = datetime.now(timezone.utc)
@@ -397,7 +397,7 @@ class TestIcsBuilder:
         assert "TRANSP:OPAQUE" in ics
 
     def test_build_ics_tarea_completada_no_incluida(self):
-        from src.mate_api.models import TaskRead
+        from mate_api.models import TaskRead
         from datetime import datetime, timezone
 
         tasks = [
@@ -432,7 +432,7 @@ class TestIcsBuilder:
     def test_ics_line_folding(self):
         """Verifica que líneas largas se pliegan correctamente (>75 chars)."""
         long_title = "A" * 100
-        from src.mate_api.models import CalendarBlockRead, Category
+        from mate_api.models import CalendarBlockRead, Category
         from datetime import datetime, timezone, timedelta
 
         now = datetime.now(timezone.utc)

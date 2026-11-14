@@ -15,6 +15,7 @@ from .models import (
     Tone,
     Category,
 )
+from datetime import datetime, timezone
 from .security import PiiRedactor
 
 
@@ -671,3 +672,23 @@ async def get_full_session_state(session_id: str) -> dict:
         "tone": session.tone,
         "ics_url": f"/api/v1/calendar/{session.ics_token}.ics",
     }
+
+
+async def list_active_sessions(conn) -> list[SessionRead]:
+    """Lista todas las sesiones activas (no vencidas)."""
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    rows = await conn.execute(
+        "SELECT * FROM sessions WHERE expires_at_utc >= ? ORDER BY created_at_utc",
+        (now,),
+    )
+    rows = await rows.fetchall()
+    return [
+        SessionRead(
+            session_id=row["session_id"],
+            ics_token=row["ics_token"],
+            tone=Tone(row["tone"]),
+            created_at_utc=parse_utc(row["created_at_utc"]),
+            expires_at_utc=parse_utc(row["expires_at_utc"]),
+        )
+        for row in rows
+    ]

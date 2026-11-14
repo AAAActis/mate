@@ -1,7 +1,7 @@
 import pytest
 import pytest_asyncio
 
-from src.mate_api.database import (
+from mate_api.database import (
     create_task,
     list_tasks_today,
     complete_task,
@@ -17,7 +17,7 @@ from src.mate_api.database import (
     list_memories,
     delete_session,
 )
-from src.mate_api.models import Category
+from mate_api.models import Category
 
 
 class TestBolaIsolation:

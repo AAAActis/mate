@@ -278,6 +278,40 @@ class StoreFactory:
             await self._redis_client.close()
 
 
+# Instancia global
+_factory: Optional[StoreFactory] = None
+
+
+def get_factory() -> StoreFactory:
+    """Obtiene la factory singleton."""
+    global _factory
+    if _factory is None:
+        _factory = StoreFactory()
+    return _factory
+
+
+async def get_token_budget() -> TokenBudgetStore:
+    """Obtiene el store de presupuesto de tokens (inicializa si necesario)."""
+    factory = get_factory()
+    await factory.initialize()
+    return factory.budget_store
+
+
+async def get_rate_limiter() -> RateLimiter:
+    """Obtiene el rate limiter (inicializa si necesario)."""
+    factory = get_factory()
+    await factory.initialize()
+    return factory.rate_limiter
+
+
+async def reset_stores() -> None:
+    """Resetea los stores globales (útil para tests)."""
+    global _factory
+    if _factory:
+        await _factory.close()
+    _factory = None
+
+
 store_factory = StoreFactory()
 
 

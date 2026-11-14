@@ -173,10 +173,12 @@ class RuleBasedFallbackAgent:
     """
 
     GYM_KEYWORDS = ["gym", "gimnasio", "entrenar", "ejercicio", "pesas", "cardio", "fitness"]
-    STUDY_KEYWORDS = ["estudiar", "estudio", "leer", "repasar", "tarea", "deberes", "materia", "examen", "parcial"]
+    STUDY_KEYWORDS = ["estudiar", "estudio", "leer", "repasar", "materia", "examen", "parcial"]
     BIRTHDAY_KEYWORDS = ["cumple", "cumpleaños", "aniversario", "aniversari"]
     TODAY_KEYWORDS = ["qué tengo", "que tengo", "hoy", "agenda", "pendiente", "lista", "resumen"]
     SCHEDULE_KEYWORDS = ["agendá", "agenda", "reservá", "reserva", "bloqueá", "bloquea", "poné", "pon", "programá", "programa"]
+    TASK_CREATE_KEYWORDS = ["crear tarea", "crear_tarea", "nueva tarea", "agregar tarea", "añadir tarea"]
+    HABIT_CREATE_KEYWORDS = ["crear hábito", "crear habito", "crear_habito", "nuevo hábito", "nuevo habito", "agregar hábito", "agregar habito"]
 
     def __init__(self, session_id: str, tone: Tone):
         self.session_id = session_id
@@ -186,6 +188,12 @@ class RuleBasedFallbackAgent:
         text_lower = text.lower()
 
         # Prioridad: patrones más específicos primero
+        if any(kw in text_lower for kw in self.TASK_CREATE_KEYWORDS):
+            return "crear_tarea"
+
+        if any(kw in text_lower for kw in self.HABIT_CREATE_KEYWORDS):
+            return "crear_habito"
+
         if any(kw in text_lower for kw in self.GYM_KEYWORDS):
             if any(kw in text_lower for kw in ["hoy", "ahora", "ya", "voy", "vamos"]):
                 return "gym_checkin"
@@ -212,25 +220,55 @@ class RuleBasedFallbackAgent:
         avatar_state = AvatarState.HABLANDO
 
         try:
-            if intent == "gym_checkin":
-                # Buscar hábito gym y marcar cumplimiento
-                from .database import list_habits
-                habits = await list_habits(self.session_id)
-                gym_habit = next((h for h in habits if "gym" in h.name.lower() or "gimnasio" in h.name.lower()), None)
-                if gym_habit:
-                    result = await TOOL_MAP["registrar_cumplimiento"](self.session_id, {"tipo": "habito", "item_id": gym_habit.id})
-                    tools_executed.append(ModelToolResult(name="registrar_cumplimiento", success=result.success, result=result.data))
-                    if result.success:
-                        avatar_state = AvatarState.CONTENTO
-                        reply = self._reply_gym_done(gym_habit.name)
-                    else:
-                        avatar_state = AvatarState.SERIO
-                        reply = self._reply_gym_not_found()
+            if intent == "crear_tarea":
+                # Extraer título del mensaje (quitar palabras clave)
+                title = user_message
+                for kw in self.TASK_CREATE_KEYWORDS:
+                    title = title.lower().replace(kw, "").strip()
+                # Limpiar puntuación inicial
+                title = title.lstrip(":,- ").strip()
+                if not title:
+                    title = "Tarea nueva"
+                result = await TOOL_MAP["crear_tarea"](self.session_id, {"titulo": title})
+                tools_executed.append(ModelToolResult(name="crear_tarea", success=result.success, result=result.data))
+                if result.success:
+                    avatar_state = AvatarState.CONTENTO
+                    reply = self._reply_task_created(title)
                 else:
                     avatar_state = AvatarState.SERIO
-                    reply = self._reply_no_gym_habit()
+                    reply = "No pude crear la tarea. Probá de nuevo."
 
-            elif intent == "gym":
+            elif intent == "crear_habito":
+                # Extraer nombre del hábito
+                name = user_message
+                for kw in self.HABIT_CREATE_KEYWORDS:
+                    name = name.lower().replace(kw, "").strip()
+                name = name.lstrip(":,- ").strip()
+                if not name:
+                    name = "Hábito nuevo"
+                # Detectar veces por semana (por defecto 3)
+                veces = 3
+                import re
+                match = re.search(r"(\d)\s*(?:vez|veces|día|dias)", user_message.lower())
+                if match:
+                    veces = min(max(int(match.group(1)), 1), 7)
+                # Detectar hora (por defecto 19:00)
+                hora = "19:00"
+                match = re.search(r"(\d{1,2}):(\d{2})", user_message)
+                if match:
+                    h, m = int(match.group(1)), int(match.group(2))
+                    if 0 <= h <= 23 and 0 <= m <= 59:
+                        hora = f"{h:02d}:{m:02d}"
+                result = await TOOL_MAP["crear_habito"](self.session_id, {"nombre": name, "veces_por_semana": veces, "hora_habitual": hora})
+                tools_executed.append(ModelToolResult(name="crear_habito", success=result.success, result=result.data))
+                if result.success:
+                    avatar_state = AvatarState.CONTENTO
+                    reply = self._reply_habit_created(name, veces, hora)
+                else:
+                    avatar_state = AvatarState.SERIO
+                    reply = "No pude crear el hábito. Probá de nuevo."
+
+            elif intent == "gym_checkin":
                 reply = self._reply_gym_motivation()
                 avatar_state = AvatarState.HABLANDO
 
@@ -322,6 +360,16 @@ class RuleBasedFallbackAgent:
         if self.tone == Tone.FIRME:
             return "Gym. Ahora. Sin excusas. Te quedan entrenamientos esta semana."
         return "¿Hoy toca gym? 💪 Si querés, lo agendamos y te aviso a la hora. ¡Dale!"
+
+    def _reply_task_created(self, title: str) -> str:
+        if self.tone == Tone.FIRME:
+            return f"Tarea '{title}' creada. A hacerla."
+        return f"¡Listo! ✅ Tarea '{title}' anotada. ¿Querés que busque un hueco para hoy?"
+
+    def _reply_habit_created(self, name: str, veces: int, hora: str) -> str:
+        if self.tone == Tone.FIRME:
+            return f"Hábito '{name}' creado: {veces} veces/semana a las {hora}."
+        return f"¡Genial! 🔁 Hábito '{name}' creado ({veces} veces/semana a las {hora}). Te avisaré cuando toque."
 
     def _reply_study_booked(self, start_iso: str, title: str) -> str:
         from datetime import datetime
@@ -502,6 +550,21 @@ class MateAgent:
             reply=final_content,
             avatar_state=avatar_state,
             tools_executed=tools_executed,
-            state_snapshot=None,
+            state_snapshot={},
             is_degraded=False,
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Factory para obtener agente
+# ──────────────────────────────────────────────────────────────────────
+
+_agent_cache: dict[str, MateAgent] = {}
+
+
+def get_agent(session_id: str, tone: Tone = Tone.AMABLE) -> MateAgent:
+    """Obtiene o crea un agente para la sesión."""
+    cache_key = f"{session_id}:{tone.value}"
+    if cache_key not in _agent_cache:
+        _agent_cache[cache_key] = MateAgent(session_id, tone)
+    return _agent_cache[cache_key]

@@ -10,9 +10,9 @@
 ---
 
 ## Resumen de Progreso Actual
-- **Fase Actual:** Fase 2 (API FastAPI, Proactividad por SSE, Rate Limiting y Cabeceras)
-- **Último Commit Verificado:** Fase 1 - Las 8 Herramientas, Agente con Tool Calling + Fallback y Calendario .ics
-- **Estado del Verificador:** APTO (Fase 1)
+- **Fase Actual:** Fase 3 (Frontend "Warm Yerba & Organic Craft")
+- **Último Commit Verificado:** Fase 2 - API FastAPI, Proactividad SSE, Rate Limiting, Cabeceras
+- **Estado del Verificador:** APTO (Fase 2)
 - **Bloqueos / Dudas para Santiago:** Ninguno
 
 ---
@@ -42,13 +42,13 @@
 - [x] **1.5. [GATE]** Invocar al subagente **`verificador`** sobre la Fase 1. Solo avanzar si devuelve **APTO**. → **VEREDICTO: APTO** (30/30 tests pasan, mutación BOLA detectada en `complete_task`, mutación Tool Calling Limit detectada con hardcodeo `EXPECTED_MAX_TOOL_CALLS=4`, mutación PII detectada en CBU, line folding RFC 5545 ≤75 chars verificado, ToolResult con success/error/data, sin SQL directo desde LLM).
 
 ### FASE 2: API FastAPI, Proactividad por SSE (`scheduler.py`), Rate Limiting y Cabeceras
-- [ ] **2.1.** Crear `src/mate_api/scheduler.py` (loop asíncrono y despachador de eventos SSE por sesión) que evalúe reglas proactivas (hábito pendiente, bloque de estudio próximo, cumpleaños dentro de 7 días) y permita disparar los 3 escenarios bajo demanda.
-- [ ] **2.2.** Crear `src/mate_api/main.py` exponiendo todos los endpoints de `CONTEXTO-BACKEND.md` (sembrando 2 eventos iniciales de demostración al crear una sesión nueva para que la tarjeta `"Tu agenda"` muestre eventos desde el segundo cero como en el diseño), cookie `HttpOnly` (`SameSite=Lax`), Rate Limiting por `CF-Connecting-IP`, errores en formato **Problem Details (RFC 9457)**, CORS cerrado por defecto y cabeceras de seguridad (`Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`).
-- [ ] **2.3.** Crear `tests/test_api_security.py` con `httpx.AsyncClient` / `TestClient` verificando:
+- [x] **2.1.** Crear `src/mate_api/scheduler.py` (loop asíncrono y despachador de eventos SSE por sesión) que evalúe reglas proactivas (hábito pendiente, bloque de estudio próximo, cumpleaños dentro de 7 días) y permita disparar los 3 escenarios bajo demanda.
+- [x] **2.2.** Crear `src/mate_api/main.py` exponiendo todos los endpoints de `CONTEXTO-BACKEND.md` (sembrando 2 eventos iniciales de demostración al crear una sesión nueva para que la tarjeta `"Tu agenda"` muestre eventos desde el segundo cero como en el diseño), cookie `HttpOnly` (`SameSite=Lax`), Rate Limiting por `CF-Connecting-IP`, errores en formato **Problem Details (RFC 9457)**, CORS cerrado por defecto y cabeceras de seguridad (`Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`).
+- [x] **2.3.** Crear `tests/test_api_security.py` con `httpx.AsyncClient` / `TestClient` verificando:
   - Aislamiento BOLA a nivel HTTP (`POST /api/v1/items/task/{id_ajeno}/complete` devuelve `404` Problem Details).
   - CORS cerrado (origen externo `https://evil.com` no recibe `Access-Control-Allow-Origin`).
   - Rate Limiting (`429 Too Many Requests`), revocación de `.ics` (el token viejo da `404` y el nuevo da `200 text/calendar`) y botón "Borrar todo" (`DELETE /api/v1/session`).
-- [ ] **2.4. [GATE]** Invocar al subagente **`verificador`** sobre la Fase 2. Solo avanzar si devuelve **APTO**.
+- [x] **2.4. [GATE]** Invocar al subagente **`verificador`** sobre la Fase 2. Solo avanzar si devuelve **APTO**. → **VEREDICTO: APTO** (76/76 tests pasan, mutación BOLA detectada en `database.py:291`, mutación Tool Calling detectada en `agent.py:42`, CORS/CSP/RateLimit/Problem Details/.ics revocación/Borrar todo/SSE health checks verificados).
 
 ### FASE 3: Frontend "Warm Yerba & Organic Craft" (`static/index.html`) con Todos los Plugins Activos
 - [ ] **3.1.** Construir `src/mate_api/static/index.html` combinando obligatoriamente los skills **`impeccable`** (eliminar todo rastro de IA genérica), **`Superdesign`**, **`frontend-design`**, **`emil-design-eng`**, **`animate`**, **`review-animations`** y **`mobile-native`** siguiendo `CONTEXTO-FRONTEND.md`:
@@ -75,4 +75,5 @@
 |---|---|---|---|---|
 | 14/11/2026 | Inicialización | - | - | Creados archivos de contexto ("Warm Yerba") y `ESTADO.md`. Listo para arrancar Fase 0. |
 | 14/11/2026 | Fase 0 | (commit pendiente) | **APTO** | 26/26 tests pasan. Fixes aplicados a 5 queries en `database.py` (complete_task, get_task, complete_habit, get_habit, get_block) para filtrar por session_id. Mutación BOLA detectada: test `test_task_created_in_session_a_not_visible_in_session_b` falla si se elimina filtro. PII redacción verificada para CBU (16/20/22 dígitos), DNI/CUIT/CUIL, emails, teléfonos AR. SQLite WAL + FK ON confirmado. Próximo: Fase 1 (tools.py, agent.py, ics_builder.py). |
-| 14/11/2026 | Fase 1 | (commit pendiente) | **APTO** | 56/56 tests totales pasan (26 Fase 0 + 30 Fase 1). Mutación BOLA detectada en `complete_task` (session_id filter). Mutación Tool Calling Limit detectada: test `test_max_tool_calls_limit` usa `EXPECTED_MAX_TOOL_CALLS=4` hardcodeado y falla si se cambia `MAX_TOOL_CALLS_PER_TURN` a 10. Mutación PII detectada: comentando regex CBU falla `test_guardar_dato_redacta_pii`. Line folding RFC 5545 ≤75 chars verificado. ToolResult incluye success/error/data. Sin SQL directo desde LLM. Próximo: Fase 2 (main.py, scheduler.py, API endpoints, security headers). |
+| 14/11/2026 | Fase 1 | 18a2d65 | **APTO** | 56/56 tests totales pasan (26 Fase 0 + 30 Fase 1). Mutación BOLA detectada en `complete_task` (session_id filter). Mutación Tool Calling Limit detectada: test `test_max_tool_calls_limit` usa `EXPECTED_MAX_TOOL_CALLS=4` hardcodeado y falla si se cambia `MAX_TOOL_CALLS_PER_TURN` a 10. Mutación PII detectada: comentando regex CBU falla `test_guardar_dato_redacta_pii`. Line folding RFC 5545 ≤75 chars verificado. ToolResult incluye success/error/data. Sin SQL directo desde LLM. Próximo: Fase 2 (main.py, scheduler.py, API endpoints, security headers). |
+| 14/11/2026 | Fase 2 | (commit pendiente) | **APTO** | 76/76 tests totales pasan (26 Fase 0 + 30 Fase 1 + 20 Fase 2). Mutación BOLA detectada en `database.py:291` (complete_task sin session_id → test_bola_isolation falla). Mutación Tool Calling detectada en `agent.py:42` (MAX_TOOL_CALLS_PER_TURN=4→10 → test_max_tool_calls_limit falla). CORS/CSP/RateLimit/Problem Details/.ics revocación/DELETE session/SSE/Health checks todos verificados. Próximo: Fase 3 (static/index.html - Warm Yerba, Avatar 4 estados, Globo diálogo, Agenda interactiva, 4 tarjetas acción, barra chat). |
