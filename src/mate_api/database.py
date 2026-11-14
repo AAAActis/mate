@@ -1,0 +1,673 @@
+import aiosqlite
+import time
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Optional
+
+from .config import get_settings
+from .models import (
+    TaskRead,
+    HabitRead,
+    CalendarBlockRead,
+    MemoryRead,
+    SessionRead,
+    Tone,
+    Category,
+)
+from .security import PiiRedactor
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Conexión y PRAGMAs
+# ──────────────────────────────────────────────────────────────────────
+
+_DB_PATH: Optional[Path] = None
+
+
+def get_db_path() -> Path:
+    global _DB_PATH
+    if _DB_PATH is None:
+        settings = get_settings()
+        _DB_PATH = Path(settings.DATABASE_PATH)
+        _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return _DB_PATH
+
+
+@asynccontextmanager
+async def get_connection():
+    db_path = get_db_path()
+    conn = await aiosqlite.connect(db_path)
+    conn.row_factory = aiosqlite.Row
+    # PRAGMAs para rendimiento y consistencia
+    await conn.execute("PRAGMA journal_mode=WAL;")
+    await conn.execute("PRAGMA synchronous=NORMAL;")
+    await conn.execute("PRAGMA foreign_keys=ON;")
+    await conn.execute("PRAGMA busy_timeout=5000;")
+    try:
+        yield conn
+    finally:
+        await conn.close()
+
+
+@asynccontextmanager
+async def db_transaction():
+    async with get_connection() as conn:
+        try:
+            yield conn
+            await conn.commit()
+        except Exception:
+            await conn.rollback()
+            raise
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Inicialización de esquemas
+# ──────────────────────────────────────────────────────────────────────
+
+SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY,
+    ics_token TEXT NOT NULL UNIQUE,
+    tone TEXT NOT NULL DEFAULT 'amable',
+    created_at_utc TEXT NOT NULL,
+    expires_at_utc TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    due_time TEXT,
+    completed INTEGER NOT NULL DEFAULT 0,
+    created_at_utc TEXT NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS habits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    target_per_week INTEGER NOT NULL DEFAULT 3,
+    done_this_week INTEGER NOT NULL DEFAULT 0,
+    preferred_time TEXT DEFAULT '19:00',
+    last_checkin_date TEXT,
+    created_at_utc TEXT NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS calendar_blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    start_utc TEXT NOT NULL,
+    end_utc TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'estudio',
+    FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    fact_key TEXT NOT NULL,
+    fact_value TEXT NOT NULL,
+    event_date TEXT,
+    created_at_utc TEXT NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id);
+CREATE INDEX IF NOT EXISTS idx_habits_session ON habits(session_id);
+CREATE INDEX IF NOT EXISTS idx_blocks_session ON calendar_blocks(session_id, start_utc);
+CREATE INDEX IF NOT EXISTS idx_memories_session ON memories(session_id);
+"""
+
+
+async def init_db() -> None:
+    async with db_transaction() as conn:
+        await conn.executescript(SCHEMA_SQL)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Helpers de tiempo
+# ──────────────────────────────────────────────────────────────────────
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def parse_utc(iso_str: str) -> datetime:
+    return datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+
+
+def session_expires_at(hours: int = 24) -> str:
+    return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat(timespec="seconds")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Sesiones (creación, obtención, borrado, rotación ics_token)
+# ──────────────────────────────────────────────────────────────────────
+
+async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMABLE) -> SessionRead:
+    now = utc_now_iso()
+    expires = session_expires_at(get_settings().SESSION_TTL_HOURS)
+    async with db_transaction() as conn:
+        await conn.execute(
+            """
+            INSERT INTO sessions (session_id, ics_token, tone, created_at_utc, expires_at_utc)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (session_id, ics_token, tone.value, now, expires),
+        )
+    return SessionRead(
+        session_id=session_id,
+        ics_token=ics_token,
+        tone=tone,
+        created_at_utc=parse_utc(now),
+        expires_at_utc=parse_utc(expires),
+    )
+
+
+async def get_session(session_id: str) -> Optional[SessionRead]:
+    async with get_connection() as conn:
+        row = await conn.execute(
+            "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+        )
+        row = await row.fetchone()
+        if not row:
+            return None
+        return SessionRead(
+            session_id=row["session_id"],
+            ics_token=row["ics_token"],
+            tone=Tone(row["tone"]),
+            created_at_utc=parse_utc(row["created_at_utc"]),
+            expires_at_utc=parse_utc(row["expires_at_utc"]),
+        )
+
+
+async def update_session_tone(session_id: str, tone: Tone) -> bool:
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "UPDATE sessions SET tone = ? WHERE session_id = ?", (tone.value, session_id)
+        )
+        return cur.rowcount > 0
+
+
+async def rotate_ics_token(session_id: str, new_ics_token: str) -> bool:
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "UPDATE sessions SET ics_token = ? WHERE session_id = ?", (new_ics_token, session_id)
+        )
+        return cur.rowcount > 0
+
+
+async def delete_session(session_id: str) -> bool:
+    """Borra la sesión y TODO en cascada (tasks, habits, blocks, memories)."""
+    async with db_transaction() as conn:
+        cur = await conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+        return cur.rowcount > 0
+
+
+async def purge_expired_sessions() -> int:
+    """Elimina sesiones vencidas (> 24h). Lo llama scheduler.py cada 5 min."""
+    now = utc_now_iso()
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "DELETE FROM sessions WHERE expires_at_utc < ?", (now,)
+        )
+        return cur.rowcount
+
+
+async def get_session_by_ics_token(ics_token: str) -> Optional[SessionRead]:
+    async with get_connection() as conn:
+        row = await conn.execute(
+            "SELECT * FROM sessions WHERE ics_token = ?", (ics_token,)
+        )
+        row = await row.fetchone()
+        if not row:
+            return None
+        return SessionRead(
+            session_id=row["session_id"],
+            ics_token=row["ics_token"],
+            tone=Tone(row["tone"]),
+            created_at_utc=parse_utc(row["created_at_utc"]),
+            expires_at_utc=parse_utc(row["expires_at_utc"]),
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Tasks — TODAS las queries filtran por session_id (BOLA prevention)
+# ──────────────────────────────────────────────────────────────────────
+
+async def create_task(session_id: str, title: str, due_time: Optional[str] = None) -> TaskRead:
+    now = utc_now_iso()
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            """
+            INSERT INTO tasks (session_id, title, due_time, completed, created_at_utc)
+            VALUES (?, ?, ?, 0, ?)
+            """,
+            (session_id, title, due_time, now),
+        )
+        task_id = cur.lastrowid
+    return TaskRead(
+        id=task_id,
+        session_id=session_id,
+        title=title,
+        due_time=due_time,
+        completed=False,
+        created_at_utc=parse_utc(now),
+    )
+
+
+async def list_tasks_today(session_id: str) -> list[TaskRead]:
+    today = datetime.now().strftime("%Y-%m-%d")
+    async with get_connection() as conn:
+        rows = await conn.execute(
+            """
+            SELECT * FROM tasks
+            WHERE session_id = ? AND (due_time IS NULL OR due_time <= '23:59')
+            ORDER BY due_time IS NULL, due_time
+            """,
+            (session_id,),
+        )
+        rows = await rows.fetchall()
+    return [
+        TaskRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            title=row["title"],
+            due_time=row["due_time"],
+            completed=bool(row["completed"]),
+            created_at_utc=parse_utc(row["created_at_utc"]),
+        )
+        for row in rows
+    ]
+
+
+async def complete_task(session_id: str, task_id: int) -> bool:
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "UPDATE tasks SET completed = 1 WHERE id = ? AND session_id = ?", (task_id, session_id)
+        )
+        return cur.rowcount > 0
+
+
+async def get_task(session_id: str, task_id: int) -> Optional[TaskRead]:
+    async with get_connection() as conn:
+        row = await conn.execute(
+            "SELECT * FROM tasks WHERE id = ? AND session_id = ?", (task_id, session_id)
+        )
+        row = await row.fetchone()
+        if not row:
+            return None
+        return TaskRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            title=row["title"],
+            due_time=row["due_time"],
+            completed=bool(row["completed"]),
+            created_at_utc=parse_utc(row["created_at_utc"]),
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Habits
+# ──────────────────────────────────────────────────────────────────────
+
+async def create_habit(
+    session_id: str,
+    name: str,
+    target_per_week: int = 3,
+    preferred_time: str = "19:00",
+) -> HabitRead:
+    now = utc_now_iso()
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            """
+            INSERT INTO habits (session_id, name, target_per_week, done_this_week, preferred_time, created_at_utc)
+            VALUES (?, ?, ?, 0, ?, ?)
+            """,
+            (session_id, name, target_per_week, preferred_time, now),
+        )
+        habit_id = cur.lastrowid
+    return HabitRead(
+        id=habit_id,
+        session_id=session_id,
+        name=name,
+        target_per_week=target_per_week,
+        done_this_week=0,
+        preferred_time=preferred_time,
+        last_checkin_date=None,
+        created_at_utc=parse_utc(now),
+    )
+
+
+async def list_habits(session_id: str) -> list[HabitRead]:
+    async with get_connection() as conn:
+        rows = await conn.execute(
+            "SELECT * FROM habits WHERE session_id = ? ORDER BY created_at_utc", (session_id,)
+        )
+        rows = await rows.fetchall()
+    return [
+        HabitRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            name=row["name"],
+            target_per_week=row["target_per_week"],
+            done_this_week=row["done_this_week"],
+            preferred_time=row["preferred_time"],
+            last_checkin_date=row["last_checkin_date"],
+            created_at_utc=parse_utc(row["created_at_utc"]),
+        )
+        for row in rows
+    ]
+
+
+async def complete_habit(session_id: str, habit_id: int) -> bool:
+    today = datetime.now().strftime("%Y-%m-%d")
+    async with db_transaction() as conn:
+        # Verificar que no se haya completado hoy ya
+        row = await conn.execute(
+            "SELECT last_checkin_date FROM habits WHERE id = ? AND session_id = ?", (habit_id, session_id)
+        )
+        row = await row.fetchone()
+        if not row:
+            return False
+        if row["last_checkin_date"] == today:
+            return False  # Ya completado hoy
+        cur = await conn.execute(
+            """
+            UPDATE habits
+            SET done_this_week = done_this_week + 1, last_checkin_date = ?
+            WHERE id = ? AND session_id = ?
+            """,
+            (today, habit_id, session_id),
+        )
+        return cur.rowcount > 0
+
+
+async def get_habit(session_id: str, habit_id: int) -> Optional[HabitRead]:
+    async with get_connection() as conn:
+        row = await conn.execute(
+            "SELECT * FROM habits WHERE id = ? AND session_id = ?", (habit_id, session_id)
+        )
+        row = await row.fetchone()
+        if not row:
+            return None
+        return HabitRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            name=row["name"],
+            target_per_week=row["target_per_week"],
+            done_this_week=row["done_this_week"],
+            preferred_time=row["preferred_time"],
+            last_checkin_date=row["last_checkin_date"],
+            created_at_utc=parse_utc(row["created_at_utc"]),
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Calendar Blocks
+# ──────────────────────────────────────────────────────────────────────
+
+async def create_calendar_block(
+    session_id: str,
+    title: str,
+    start_utc: str,
+    end_utc: str,
+    category: Category = Category.ESTUDIO,
+) -> CalendarBlockRead:
+    async with db_transaction() as conn:
+        # Verificar solapamiento
+        row = await conn.execute(
+            """
+            SELECT 1 FROM calendar_blocks
+            WHERE session_id = ?
+              AND start_utc < ? AND end_utc > ?
+            LIMIT 1
+            """,
+            (session_id, end_utc, start_utc),
+        )
+        if await row.fetchone():
+            raise ValueError("El bloque se solapa con uno existente")
+        cur = await conn.execute(
+            """
+            INSERT INTO calendar_blocks (session_id, title, start_utc, end_utc, category)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (session_id, title, start_utc, end_utc, category.value),
+        )
+        block_id = cur.lastrowid
+    return CalendarBlockRead(
+        id=block_id,
+        session_id=session_id,
+        title=title,
+        start_utc=parse_utc(start_utc),
+        end_utc=parse_utc(end_utc),
+        category=category,
+    )
+
+
+async def list_blocks_today(session_id: str) -> list[CalendarBlockRead]:
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc).isoformat()
+    tomorrow_start = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+    async with get_connection() as conn:
+        rows = await conn.execute(
+            """
+            SELECT * FROM calendar_blocks
+            WHERE session_id = ? AND start_utc >= ? AND start_utc < ?
+            ORDER BY start_utc
+            """,
+            (session_id, today_start, tomorrow_start),
+        )
+        rows = await rows.fetchall()
+    return [
+        CalendarBlockRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            title=row["title"],
+            start_utc=parse_utc(row["start_utc"]),
+            end_utc=parse_utc(row["end_utc"]),
+            category=Category(row["category"]),
+        )
+        for row in rows
+    ]
+
+
+async def list_upcoming_blocks(session_id: str, limit: int = 10) -> list[CalendarBlockRead]:
+    now = utc_now_iso()
+    async with get_connection() as conn:
+        rows = await conn.execute(
+            """
+            SELECT * FROM calendar_blocks
+            WHERE session_id = ? AND start_utc >= ?
+            ORDER BY start_utc
+            LIMIT ?
+            """,
+            (session_id, now, limit),
+        )
+        rows = await rows.fetchall()
+    return [
+        CalendarBlockRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            title=row["title"],
+            start_utc=parse_utc(row["start_utc"]),
+            end_utc=parse_utc(row["end_utc"]),
+            category=Category(row["category"]),
+        )
+        for row in rows
+    ]
+
+
+async def find_free_slots(
+    session_id: str, duration_minutes: int = 60, date_iso: Optional[str] = None
+) -> list[tuple[str, str]]:
+    """Devuelve hasta 3 franjas libres entre 08:00 y 22:00 para la fecha dada (hoy por defecto)."""
+    if date_iso is None:
+        date_iso = datetime.now().strftime("%Y-%m-%d")
+
+    day_start = f"{date_iso}T08:00:00+00:00"
+    day_end = f"{date_iso}T22:00:00+00:00"
+
+    async with get_connection() as conn:
+        rows = await conn.execute(
+            """
+            SELECT start_utc, end_utc FROM calendar_blocks
+            WHERE session_id = ? AND start_utc < ? AND end_utc > ?
+            ORDER BY start_utc
+            """,
+            (session_id, day_end, day_start),
+        )
+        rows = await rows.fetchall()
+
+    blocks = [(parse_utc(r["start_utc"]), parse_utc(r["end_utc"])) for r in rows]
+    slots: list[tuple[str, str]] = []
+    current = parse_utc(day_start)
+    duration = timedelta(minutes=duration_minutes)
+
+    for start, end in blocks:
+        if current + duration <= start:
+            slots.append((current.isoformat(), (current + duration).isoformat()))
+            if len(slots) >= 3:
+                return slots
+        current = max(current, end)
+
+    if current + duration <= parse_utc(day_end):
+        slots.append((current.isoformat(), (current + duration).isoformat()))
+
+    return slots[:3]
+
+
+async def get_block(session_id: str, block_id: int) -> Optional[CalendarBlockRead]:
+    async with get_connection() as conn:
+        row = await conn.execute(
+            "SELECT * FROM calendar_blocks WHERE id = ? AND session_id = ?", (block_id, session_id)
+        )
+        row = await row.fetchone()
+        if not row:
+            return None
+        return CalendarBlockRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            title=row["title"],
+            start_utc=parse_utc(row["start_utc"]),
+            end_utc=parse_utc(row["end_utc"]),
+            category=Category(row["category"]),
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Memories — Tope de 30 por sesión (FIFO)
+# ──────────────────────────────────────────────────────────────────────
+
+MAX_MEMORIES = 30
+
+
+async def create_memory(
+    session_id: str, fact_key: str, fact_value: str, event_date: Optional[str] = None
+) -> MemoryRead:
+    # Redactar PII antes de guardar
+    clean_value = PiiRedactor.redact(fact_value)
+    now = utc_now_iso()
+    async with db_transaction() as conn:
+        # Si ya hay 30, borrar la más antigua
+        await conn.execute(
+            """
+            DELETE FROM memories
+            WHERE id = (
+                SELECT id FROM memories WHERE session_id = ? ORDER BY created_at_utc LIMIT 1
+            ) AND (SELECT COUNT(*) FROM memories WHERE session_id = ?) >= ?
+            """,
+            (session_id, session_id, MAX_MEMORIES),
+        )
+        cur = await conn.execute(
+            """
+            INSERT INTO memories (session_id, fact_key, fact_value, event_date, created_at_utc)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (session_id, fact_key, clean_value, event_date, now),
+        )
+        memory_id = cur.lastrowid
+    return MemoryRead(
+        id=memory_id,
+        session_id=session_id,
+        fact_key=fact_key,
+        fact_value=clean_value,
+        event_date=event_date,
+        created_at_utc=parse_utc(now),
+    )
+
+
+async def list_memories(session_id: str) -> list[MemoryRead]:
+    async with get_connection() as conn:
+        rows = await conn.execute(
+            "SELECT * FROM memories WHERE session_id = ? ORDER BY created_at_utc DESC", (session_id,)
+        )
+        rows = await rows.fetchall()
+    return [
+        MemoryRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            fact_key=row["fact_key"],
+            fact_value=row["fact_value"],
+            event_date=row["event_date"],
+            created_at_utc=parse_utc(row["created_at_utc"]),
+        )
+        for row in rows
+    ]
+
+
+async def get_upcoming_memory_events(session_id: str, days_ahead: int = 7) -> list[MemoryRead]:
+    """Memorias con event_date dentro de los próximos N días."""
+    cutoff = (datetime.now(timezone.utc) + timedelta(days=days_ahead)).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    async with get_connection() as conn:
+        rows = await conn.execute(
+            """
+            SELECT * FROM memories
+            WHERE session_id = ? AND event_date IS NOT NULL
+              AND event_date >= ? AND event_date <= ?
+            ORDER BY event_date
+            """,
+            (session_id, today, cutoff),
+        )
+        rows = await rows.fetchall()
+    return [
+        MemoryRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            fact_key=row["fact_key"],
+            fact_value=row["fact_value"],
+            event_date=row["event_date"],
+            created_at_utc=parse_utc(row["created_at_utc"]),
+        )
+        for row in rows
+    ]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Snapshot completo del estado de la sesión (para /api/v1/session)
+# ──────────────────────────────────────────────────────────────────────
+
+async def get_full_session_state(session_id: str) -> dict:
+    session = await get_session(session_id)
+    if not session:
+        return {}
+    tasks = await list_tasks_today(session_id)
+    habits = await list_habits(session_id)
+    blocks = await list_blocks_today(session_id)
+    memories = await list_memories(session_id)
+    settings = get_settings()
+    return {
+        "session": session,
+        "tasks": tasks,
+        "habits": habits,
+        "blocks": blocks,
+        "memories": memories,
+        "tone": session.tone,
+        "ics_url": f"/api/v1/calendar/{session.ics_token}.ics",
+    }
