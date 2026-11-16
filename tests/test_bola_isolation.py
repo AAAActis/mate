@@ -1,5 +1,6 @@
 import pytest
 import pytest_asyncio
+from datetime import datetime, timezone
 
 from mate_api.database import (
     create_task,
@@ -27,6 +28,9 @@ class TestBolaIsolation:
     async def setup_sessions(self, session_a, session_b):
         self.session_a = session_a
         self.session_b = session_b
+        # Fecha de hoy en ISO con timezone UTC para calendar blocks
+        self.today_iso = datetime.now(timezone.utc).replace(hour=16, minute=0, second=0, microsecond=0).isoformat()
+        self.today_iso_end = datetime.now(timezone.utc).replace(hour=17, minute=0, second=0, microsecond=0).isoformat()
 
     # ── Tasks ──
 
@@ -78,7 +82,7 @@ class TestBolaIsolation:
 
     async def test_block_created_in_session_a_not_visible_in_session_b(self):
         await create_calendar_block(
-            self.session_a, "Estudio A", "2026-11-14T16:00:00+00:00", "2026-11-14T17:00:00+00:00"
+            self.session_a, "Estudio A", self.today_iso, self.today_iso_end
         )
         blocks_a = await list_blocks_today(self.session_a)
         blocks_b = await list_blocks_today(self.session_b)
@@ -87,7 +91,7 @@ class TestBolaIsolation:
 
     async def test_get_block_cross_session_returns_none(self):
         block = await create_calendar_block(
-            self.session_a, "Estudio A", "2026-11-14T16:00:00+00:00", "2026-11-14T17:00:00+00:00"
+            self.session_a, "Estudio A", self.today_iso, self.today_iso_end
         )
         block_b = await get_block(self.session_b, block.id)
         assert block_b is None
@@ -107,7 +111,7 @@ class TestBolaIsolation:
         await create_task(self.session_a, "Tarea", "10:00")
         await create_habit(self.session_a, "Hábito", 3, "19:00")
         await create_calendar_block(
-            self.session_a, "Bloque", "2026-11-14T16:00:00+00:00", "2026-11-14T17:00:00+00:00"
+            self.session_a, "Bloque", self.today_iso, self.today_iso_end
         )
         await create_memory(self.session_a, "clave", "valor")
 

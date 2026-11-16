@@ -2,10 +2,16 @@
 FastAPI Application - Mate Routine Companion
 API v1 con endpoints para chat, agenda, proactividad SSE y calendario .ics
 """
-import secrets
+import asyncio
+import base64
+import hashlib
 import logging
+import re
+import secrets
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from functools import lru_cache
+from pathlib import Path
 
 from fastapi import FastAPI, Request, Response, Cookie, HTTPException, Depends, status
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse
@@ -17,6 +23,7 @@ from .config import get_settings
 from .models import (
     Tone,
     AvatarState,
+    Category,
     ChatRequest,
     ChatResponse,
     ToneRequest,
@@ -41,6 +48,8 @@ from .database import (
     purge_expired_sessions,
     complete_task,
     complete_habit,
+    get_habit,
+    create_calendar_block,
     list_tasks_today,
     list_habits,
     list_blocks_today,
@@ -99,6 +108,40 @@ app = FastAPI(
 )
 
 # ──────────────────────────────────────────────────────────────────────
+# Rutas estáticas y CSP con hash de los scripts inline
+# ──────────────────────────────────────────────────────────────────────
+
+STATIC_DIR = Path(__file__).parent / "static"
+INDEX_HTML = STATIC_DIR / "index.html"
+
+
+@lru_cache(maxsize=4)
+def _inline_script_hashes(path_str: str, mtime: float) -> tuple[str, ...]:
+    """Hashes CSP (sha256) de los <script> inline de index.html.
+
+    Permite servir el frontend en un único archivo sin abrir `script-src`
+    a 'unsafe-inline': el navegador sólo acepta el script cuyo hash coincide.
+    """
+    html = Path(path_str).read_text(encoding="utf-8")
+    scripts = re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", html, re.S)
+    return tuple(
+        "'sha256-" + base64.b64encode(hashlib.sha256(s.encode("utf-8")).digest()).decode() + "'"
+        for s in scripts
+    )
+
+
+def _script_src_tokens() -> str:
+    """Tokens extra para script-src (hashes de los scripts inline)."""
+    if not INDEX_HTML.exists():
+        return ""
+    try:
+        hashes = _inline_script_hashes(str(INDEX_HTML), INDEX_HTML.stat().st_mtime)
+    except OSError:
+        return ""
+    return " " + " ".join(hashes) if hashes else ""
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Middlewares y CORS
 # ──────────────────────────────────────────────────────────────────────
 
@@ -121,7 +164,7 @@ async def security_headers_middleware(request: Request, call_next):
     # CSP restrictiva
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self'; "
+        f"script-src 'self'{_script_src_tokens()}; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
         "font-src 'self'; "
@@ -218,6 +261,7 @@ async def get_or_create_session_id(
     session_id = secrets.token_urlsafe(32)
     ics_token = secrets.token_urlsafe(32)
     await create_session(session_id, ics_token)
+    await seed_demo_events(session_id)
 
     # Set cookie HttpOnly
     response.set_cookie(
@@ -230,6 +274,38 @@ async def get_or_create_session_id(
         path="/",
     )
     return session_id
+
+
+async def seed_demo_events(session_id: str) -> None:
+    """Siembra 2 eventos de demostración con horarios relativos a 'ahora'.
+
+    El primero cae en +20 min (dentro de la ventana de 30 min del aviso
+    proactivo de estudio) y el segundo en +2 h. Así la demo respira siempre,
+    sin importar a qué hora se abra la app.
+    """
+    base = datetime.now().astimezone().replace(second=0, microsecond=0)
+
+    def _at(**kwargs):
+        # Redondeo al múltiplo de 5 min más cercano hacia arriba
+        moment = base + timedelta(**kwargs)
+        return moment + timedelta(minutes=(-moment.minute) % 5)
+
+    demo = (
+        ("Estudiar Bases de Datos", _at(minutes=20), Category.ESTUDIO),
+        ("Ir al gym", _at(hours=2), Category.GYM),
+    )
+    for title, start, category in demo:
+        end = start + timedelta(hours=1)
+        try:
+            await create_calendar_block(
+                session_id,
+                title,
+                start.astimezone(timezone.utc).isoformat(),
+                end.astimezone(timezone.utc).isoformat(),
+                category,
+            )
+        except ValueError:
+            pass  # Ya hay un bloque que se solapa: no insistir
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -278,9 +354,13 @@ async def chat_endpoint(
     budget = await get_token_budget()
     quota_remaining = await budget.get_remaining(session_id)
 
+    # El tono vive en la sesión: "amable" vs "firme"
+    session = await get_session(session_id)
+    tone = session.tone if session else Tone.AMABLE
+
     if quota_remaining <= 0:
         # Modo degradado por presupuesto agotado
-        agent = get_agent(session_id, Tone.AMABLE)
+        agent = get_agent(session_id, tone)
         fallback_response = await agent.fallback.handle(chat_req.message)
         return JSONResponse(
             status_code=200,
@@ -294,7 +374,7 @@ async def chat_endpoint(
         )
 
     # Procesar con agente
-    agent = get_agent(session_id, Tone.AMABLE)
+    agent = get_agent(session_id, tone)
     response_data = await agent.process(chat_req.message, [])
 
     # Consumir tokens estimados (aproximación)
@@ -498,6 +578,7 @@ async def delete_session_endpoint(
     new_session_id = secrets.token_urlsafe(32)
     new_ics_token = secrets.token_urlsafe(32)
     await create_session(new_session_id, new_ics_token)
+    await seed_demo_events(new_session_id)
 
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -552,19 +633,15 @@ async def readiness():
 # ──────────────────────────────────────────────────────────────────────
 
 # Servir archivos estáticos
-app.mount("/static", StaticFiles(directory="src/mate_api/static"), name="static")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request, response: Response):
     """Sirve el index.html del frontend."""
-    from pathlib import Path
-    index_path = Path("src/mate_api/static/index.html")
-    if index_path.exists():
-        return FileResponse(index_path)
+    if INDEX_HTML.exists():
+        return FileResponse(INDEX_HTML)
     return HTMLResponse("<h1>Mate API</h1><p>Frontend no construido aún. Ver /docs</p>")
 
 
 # Importar get_habit para endpoint de complete_item
-from .database import get_habit
-import asyncio

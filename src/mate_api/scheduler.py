@@ -138,12 +138,12 @@ class ProactiveScheduler:
                 pass
 
         # 2. Bloques de estudio próximos (<= 30 min)
-        blocks = await list_upcoming_blocks(session_id, minutes_ahead=30)
+        blocks = await list_upcoming_blocks(session_id, limit=10)
         for block in blocks:
             if block.category == Category.ESTUDIO:
-                # Convertir a hora local para mostrar
-                start_local = block.start_utc.astimezone()
                 minutes_until = int((block.start_utc - now).total_seconds() / 60)
+                if not 0 <= minutes_until <= 30:
+                    continue
                 messages.append(ProactiveMessage(
                     session_id=session_id,
                     event_type="estudio",

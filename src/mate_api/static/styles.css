@@ -1,0 +1,70 @@
+/* ── Sección 2: Paleta de Colores "Warm Yerba & Organic Paper" ─────────────*/
+:root {
+  /* Superficies Crema y Papel Cálido */
+  --bg-canvas: #f3ead8;
+  --bg-sidebar: #f8f2e4;
+  --bg-card: #fbf7ee;
+  --bg-card-hover: #f0e6d2;
+  --bg-accent-soft: #e2e6ce;
+
+  /* Bordes y Sombras Tierra (Cero gris frío) */
+  --border-warm: #dfd3bc;
+  --border-ink: #3a2e24;
+  --shadow-card: 0 8px 24px -4px rgba(62, 47, 35, 0.08), 0 2px 6px -1px rgba(62, 47, 35, 0.04);
+
+  /* Textos */
+  --text-primary: #2c3527;
+  --text-secondary: #5c6454;
+  --text-muted: #848978;
+
+  /* Acentos Yerba Mate y Calabaza */
+  --yerba-olive: #55633b;
+  --yerba-olive-hover: #44502e;
+  --yerba-fresh: #6a8a3a;
+  --gourd-brown: #8c5832;
+  --gourd-dark: #5e371c;
+  --metal-alpaca: #d6d9d8;
+  --status-firm: #c86d28;
+  --danger-warm: #b94a3e;
+
+  /* Tipografía sin CDNs externos (Orgánica y legible) */
+  --font-display: 'ui-rounded', 'Quicksand', 'Nunito', system-ui, -apple-system, sans-serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+/* Tema opcional: Noche Matera */
+[data-theme="dark-yerba"] {
+  --bg-canvas: #1a2118;
+  --bg-sidebar: #21291e;
+  --bg-card: #283225;
+  --bg-card-hover: #323e2e;
+  --bg-accent-soft: #243020;
+  --border-warm: #394634;
+  --border-ink: #11160f;
+  --text-primary: #f3ead8;
+  --text-secondary: #b8c2ad;
+  --text-muted: #849178;
+  --yerba-olive: #6c8049;
+}
+
+/* ── Reset básico ───────────────────────────────────────────────────────────*/
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+}
+
+/* ── Cuerpo principal ───────────────────────────────────────────────────────*/
+body {
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+/* ── focus-visible impecable ────────────────────────────────────────────────*/
+:focus-visible {
+  outline: 2px solid var(--yerba-olive);
+}
