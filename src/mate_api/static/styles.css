@@ -196,7 +196,7 @@ body {
 
   #zona-1.sidebar .tono[data-tono="firme"] {
     background: var(--status-firm);
-    color: #fff;
+    color: var(--text-primary);
     border-color: var(--status-firm);
   }
 
