@@ -198,6 +198,7 @@ body {
     background: var(--status-firm);
     color: var(--text-primary);
     border-color: var(--status-firm);
+    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
   }
 
   /* Zona 2: Escenario central */
