@@ -68,3 +68,62 @@ body {
 :focus-visible {
   outline: 2px solid var(--yerba-olive);
 }
+
+/* ── Layout principal ───────────────────────────────────────────────────────*/
+@media (min-width: 900px) {
+  body {
+    display: grid;
+    grid-template-columns: 250px 1fr 310px;
+    grid-template-rows: auto 1fr auto;
+    gap: 16px;
+  }
+
+  /* Zona 1: Sidebar izquierda */
+  #zona-1.sidebar {
+    grid-row: 1 / 3;
+    background: var(--bg-sidebar);
+  }
+
+  /* Zona 2: Escenario central */
+  #zona-3.stage {
+    grid-column: 2;
+    grid-row: 2;
+    background: var(--bg-card);
+  }
+
+  /* Zona 4: Agenda derecha */
+  #zona-4.agenda {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    background: var(--bg-card);
+  }
+
+  /* Zona 5: Acciones debajo del escenario */
+  #zona-5.actions {
+    grid-column: 1 / 4;
+    grid-row: 3;
+    background: var(--bg-card-hover);
+  }
+}
+
+@media (max-width: 899px) {
+  body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  #zona-1.sidebar,
+  #zona-2.topbar,
+  #zona-3.stage,
+  #zona-4.agenda,
+  #zona-5.actions {
+    width: 100%;
+  }
+
+  #zona-3.stage,
+  #zona-4.agenda,
+  #zona-5.actions {
+    background: var(--bg-card);
+  }
+}

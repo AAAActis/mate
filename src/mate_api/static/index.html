@@ -1,193 +1,32 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mate - Tu asistente</title>
-    <style>
-        :root {
-            --bg-canvas: #f3ead8;
-            --text-primary: #3a2e24;
-            --brand-green: #55633b;
-            --brand-brown: #8c5832;
-            --card-bg: rgba(255, 253, 245, 0.6);
-            --border-soft: rgba(58, 46, 36, 0.15);
-            --font-sans: system-ui, -apple-system, sans-serif;
-        }
-
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-canvas);
-            color: var(--text-primary);
-            font-family: var(--font-sans);
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* Sidebar */
-        .sidebar {
-            width: 260px;
-            border-right: 1px solid var(--border-soft);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .brand {
-            font-size: 2rem;
-            font-weight: bold;
-            color: var(--text-primary);
-            text-align: center;
-            margin-bottom: 5px;
-        }
-
-        .subtitle {
-            font-size: 0.9rem;
-            text-align: center;
-            color: var(--brand-green);
-            margin-bottom: 30px;
-        }
-
-        .btn-new {
-            background-color: var(--brand-green);
-            color: #f3ead8;
-            border: none;
-            padding: 12px;
-            border-radius: 20px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-bottom: 20px;
-        }
-
-        /* Main Area */
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            padding: 20px 40px;
-            position: relative;
-        }
-
-        .status-badge {
-            align-self: flex-start;
-            background: var(--card-bg);
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            border: 1px solid var(--border-soft);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .status-dot {
-            width: 10px;
-            height: 10px;
-            background-color: #10b981;
-            border-radius: 50%;
-        }
-
-        .avatar-container {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 30px;
-        }
-
-        .avatar-circle {
-            width: 250px;
-            height: 250px;
-            background-color: var(--brand-brown);
-            border-radius: 50%;
-            border: 4px solid var(--text-primary);
-            position: relative;
-        }
-
-        .chat-bubble {
-            background: var(--card-bg);
-            border: 2px solid var(--text-primary);
-            padding: 20px;
-            border-radius: 20px;
-            border-bottom-left-radius: 0;
-            max-width: 300px;
-            font-size: 1.2rem;
-            font-weight: 600;
-        }
-
-        /* Agenda Right Panel */
-        .agenda-panel {
-            width: 300px;
-            padding: 20px;
-            background: var(--card-bg);
-            border-left: 1px solid var(--border-soft);
-            border-radius: 20px 0 0 20px;
-            margin-top: 20px;
-            height: fit-content;
-        }
-
-        /* Input Area */
-        .input-area {
-            background: var(--card-bg);
-            border: 1px solid var(--border-soft);
-            padding: 15px 20px;
-            border-radius: 30px;
-            display: flex;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .input-area input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            outline: none;
-            font-size: 1rem;
-            color: var(--text-primary);
-            padding: 0 10px;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mate</title>
+  <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-    <div class="sidebar">
-        <div class="brand">Mate</div>
-        <div class="subtitle">Tu asistente, siempre con vos</div>
-        <button class="btn-new">+ Nueva conversación</button>
-        <!-- Lista de recientes iría acá -->
-    </div>
+  <aside id="zona-1" class="sidebar">
+    <!-- Barra lateral izquierda: logo Mate, selector de tono, rutinas y conversaciones -->
+  </aside>
 
-    <div class="main-content">
-        <div class="status-badge">
-            <div class="status-dot"></div> Mate en línea
-        </div>
-        
-        <div class="avatar-container">
-            <div class="avatar-circle" id="mate-avatar">
-                <!-- SVG de la cara del mate dinámico -->
-            </div>
-            <div class="chat-bubble" id="mate-speech">
-                ¡Hola, Santiago!<br>¿En qué puedo ayudarte hoy?
-            </div>
-        </div>
+  <header id="zona-2" class="topbar">
+    <!-- Topbar: puntito verde Mate en línea, contador de cuota, botón sol/luna, panel ⚙ -->
+  </header>
 
-        <div class="input-area">
-            <input type="text" id="chat-input" placeholder="Escribí tu mensaje...">
-        </div>
-    </div>
+  <main id="zona-3" class="stage">
+    <!-- Escenario central: personaje Mate con globo de diálogo -->
+  </main>
 
-    <div class="agenda-panel">
-        <h3>📅 Tu agenda</h3>
-        <div id="calendar-events">
-            <!-- Eventos inyectados por JS -->
-            <p>No hay eventos próximos.</p>
-        </div>
-    </div>
+  <aside id="zona-4" class="agenda">
+    <!-- Tarjeta "Tu agenda": navegador de mes, lista de próximos eventos -->
+  </aside>
 
-    <script>
-        // Placeholder para la lógica SSE de FastAPI
-        console.log("UI Base lista. Esperando conexión SSE...");
-    </script>
+  <section id="zona-5" class="actions">
+    <!-- 4 tarjetas horizontales + barra de chat inferior -->
+  </section>
+
+  <script src="/static/app.js" defer></script>
 </body>
 </html>

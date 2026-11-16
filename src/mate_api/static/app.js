@@ -1,0 +1,1 @@
+// App principal Mate - esqueleto, sin lógica aún
