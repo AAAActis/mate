@@ -55,6 +55,7 @@
 body {
   margin: 0;
   font-family: var(--font-sans);
+  font-size: 14px; /* 14px minimum for body readability per WCAG */
 }
 
 /* ── Cuerpo principal ───────────────────────────────────────────────────────*/
@@ -92,7 +93,7 @@ body {
     border: none;
     text-align: left;
     padding: 8px 12px;
-    font-size: 0.9rem;
+    font-size: 0.875rem; /* 14px at 16px root */
     color: var(--text-primary);
     cursor: pointer;
     border-radius: 14px;
@@ -195,9 +196,9 @@ body {
   }
 
   #zona-1.sidebar .tono[data-tono="firme"] {
-    background: var(--status-firm);
-    color: var(--text-primary);
-    border-color: var(--status-firm);
+    background: #a04c16;
+    color: var(--bg-canvas);
+    border-color: #a04c16;
     text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
   }
 
