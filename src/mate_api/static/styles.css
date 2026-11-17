@@ -202,7 +202,54 @@ body {
     text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
   }
 
-  /* Zona 2: Escenario central */
+  /* Estados del Mate (Zona 3) */
+  /* Los estilos se aplican vía data-state en el SVG del personaje */
+  /* Ojos y boca cambian según el estado activo */
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* Animaciones solo si el usuario no las ha reducido */
+  }
+}
+
+/* ── Estados del Mate (Zona 3) ───────────────────────────────────────────────*/
+/* Los estilos de ojos y boca se aplican vía[data-state] en el SVG */
+[data-state="neutro"] .ojos,
+[data-state="serio"] .ojos {
+  /* Estilos por defecto - sobreescritos por CSS específico por estado */
+}
+
+[data-state="contento"] .ojos {
+  /* Ojos arqueados felices ^ ^ */
+}
+
+[data-state="hablando"] .ojos {
+  /* Ojos ligeramente entrecerrados */
+}
+
+[data-state="contento"] .boca {
+  /* Boca sonriente amplia, trazo más grueso */
+  stroke-width: 4;
+}
+
+[data-state="serio"] .boca {
+  /* Boca recta firme */
+  stroke-width: 2;
+}
+
+[data-state="hablando"] .boca {
+  /* Boca para animación de habla */
+  animation: hablar 300ms ease-in-out infinite;
+}
+
+/* Keyframes de habla - solo si no hay prefers-reduced-motion */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes hablar {
+    0%, 100% { stroke-dashoffset: 0; }
+    50% { stroke-dashoffset: -20; }
+  }
+}
+
+/* Zona 2: Escenario central */
   #zona-3.stage {
     grid-column: 2;
     grid-row: 2;

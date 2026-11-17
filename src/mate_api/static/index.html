@@ -85,8 +85,8 @@
     <!-- Topbar: puntito verde Mate en línea, contador de cuota, botón sol/luna, panel ⚙ -->
     <div style="max-width: 1200px; margin: 0 auto; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; background: var(--bg-sidebar); border-bottom: 1px solid var(--border-warm);">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--yerba-fresh); box-shadow: 0 0 2px 1px var(--yerba-fresh);"></span>
-        <span style="font-size: 1rem; color: var(--text-secondary);">Mate en línea</span>
+        <span id="puntito-conexion" style="width: 10px; height: 10px; border-radius: 50%; background: var(--yerba-fresh); box-shadow: 0 0 2px 1px var(--yerba-fresh); transition: background 200ms cubic-bezier(0.22, 1, 0.36, 1);"></span>
+        <span id="texto-conexion" style="font-size: 1rem; color: var(--text-secondary);">Mate en línea</span>
       </div>
       <div style="display: flex; gap: 12px; align-items: center;">
         <span style="font-size: 1rem; color: var(--text-secondary);">Mensajes: <span id="contador-cuota">0</span>/20</span>
@@ -100,6 +100,19 @@
         </button>
       </div>
     </div>
+    <!-- Diálogo del panel ⚙ -->
+    <dialog id="dialog-panel" style="max-width: 400px; margin: 20px auto; padding: 24px; background: var(--bg-card); border: 1px solid var(--border-warm); border-radius: 16px; box-shadow: var(--shadow-card); color: var(--text-primary);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <span style="font-size: 1rem; font-weight: 600;">Panel de Ingeniería & Laboratorio Proactivo</span>
+        <button id="btn-cerrar-dialogo" style="background: none; color: var(--text-muted); border: none; font-size: 1.5rem; cursor: pointer;">✕</button>
+      </div>
+      <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px;">Panel para ver llamadas a herramientas y simular avisos proactivos.</p>
+      <div style="display: grid; gap: 8px;">
+        <button style="background: var(--bg-card); border: 1px solid var(--border-warm); padding: 8px; border-radius: 8px; font-size: 0.875rem; color: var(--text-primary); cursor: pointer;" id="btn-simular-gym">Simular aviso Gym</button>
+        <button style="background: var(--bg-card); border: 1px solid var(--border-warm); padding: 8px; border-radius: 8px; font-size: 0.875rem; color: var(--text-primary); cursor: pointer;" id="btn-simular-estudio">Simular aviso Estudio</button>
+        <button style="background: var(--bg-card); border: 1px solid var(--border-warm); padding: 8px; border-radius: 8px; font-size: 0.875rem; color: var(--text-primary); cursor: pointer;" id="btn-simular-cumple">Simular aviso Cumple</button>
+      </div>
+    </dialog>
   </header>
 
   <main id="zona-3" class="stage">
@@ -116,7 +129,7 @@
           <path d="M80 60 Q85 45 95 55 Q100 60 95 70 Q90 75 85 70 Q80 65 80 60" fill="#55633b" opacity="0.4" />
         </svg>
         <!-- Personaje Mate 2D -->
-        <svg width="200" height="200" style="position: relative; width: 100%; height: 100;">
+        <svg width="200" height="200" style="position: relative; width: 100%; height: 100;" data-state="neutro">
           <!-- Calabaza marrón -->
           <circle cx="100" cy="120" r="80" fill="#8c5832" stroke="#3a2e24" stroke-width="3" />
           <!-- Virola plateada -->
@@ -130,10 +143,11 @@
           <!-- Mejillas ruborizadas -->
           <circle cx="70" cy="130" r="12" fill="rgba(255,180,150,0.4)" opacity="0.5" />
           <circle cx="130" cy="130" r="12" fill="rgba(255,180,150,0.4)" opacity="0.5" />
-          <!-- Ojos y boca por defecto (neutro) -->
-          <circle cx="70" cy="100" r="10" fill="#2c3527" />
-          <circle cx="130" cy="100" r="10" fill="#2c3527" />
-          <line x1="80" y1="115" x2="120" y2="115" stroke="#3a2e24" stroke-width="2" />
+          <!-- Ojos (cambian segun data-state) -->
+          <circle class="ojos" cx="70" cy="100" r="10" fill="#2c3527" />
+          <circle class="ojos" cx="130" cy="100" r="10" fill="#2c3527" />
+          <!-- Boca -->
+          <line class="boca" x1="80" y1="115" x2="120" y2="115" stroke="#3a2e24" stroke-width="2" />
         </svg>
       </div>
 
