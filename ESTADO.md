@@ -10,10 +10,10 @@
 ---
 
 ## Resumen de Progreso Actual
-- **Fase Actual:** Fase 3 (Frontend "Warm Yerba & Organic Craft")
+- **Fase Actual:** Fase 3 (Frontend "Warm Yerba & Organic Craft") - GATE pendiente (3.3 [GATE])
 - **Último Commit Verificado:** Fase 2 - API FastAPI, Proactividad SSE, Rate Limiting, Cabeceras
 - **Estado del Verificador:** APTO (Fase 2)
-- **Bloqueos / Dudas para Santiago:** Ninguno
+- **Bloqueos / Dudas para Santiago:** GATE Fase 3 pendiente (verificador no invocado aún)
 
 ---
 
@@ -51,14 +51,19 @@
 - [x] **2.4. [GATE]** Invocar al subagente **`verificador`** sobre la Fase 2. Solo avanzar si devuelve **APTO**. → **VEREDICTO: APTO** (76/76 tests pasan, mutación BOLA detectada en `database.py:291`, mutación Tool Calling detectada en `agent.py:42`, CORS/CSP/RateLimit/Problem Details/.ics revocación/Borrar todo/SSE health checks verificados).
 
 ### FASE 3: Frontend "Warm Yerba & Organic Craft" (`static/index.html`) con Todos los Plugins Activos
-- [ ] **3.1.** Construir `src/mate_api/static/index.html` combinando obligatoriamente los skills **`impeccable`** (eliminar todo rastro de IA genérica), **`Superdesign`**, **`frontend-design`**, **`emil-design-eng`**, **`animate`**, **`review-animations`** y **`mobile-native`** siguiendo `CONTEXTO-FRONTEND.md`:
+- [x] **3.1.** Construir `src/mate_api/static/index.html` combinando obligatoriamente los skills **`impeccable`** (eliminar todo rastro de IA genérica), **`Superdesign`**, **`frontend-design`**, **`emil-design-eng`**, **`animate`**, **`review-animations`** y **`mobile-native`** siguiendo `CONTEXTO-FRONTEND.md`:
   - Paleta crema cálido (`#f3ead8`, `#fbf7ee`), verde yerba (`#55633b`) y marrón calabaza (`#8c5832`) + modo alternativo `"Noche Matera"`.
   - Sidebar izquierda con logo ilustrado `Mate`, botón `+ Nueva conversación`, accesos rápidos, resumen de agenda y selector de tono (`Amable` / `Firme`).
   - Escenario central con el **Avatar SVG 2D ilustrado del Mate** (con sus 4 caras/estados animados `neutro`, `hablando`, `contento`, `serio` + `speechSynthesis`) hablándole al usuario mediante el **gran globo de diálogo ("cuadradito de texto")** a su derecha.
   - Tarjeta derecha **`"Tu agenda"`** con tira semanal interactiva (`Lu Ma Mi Ju Vi Sá Do`), lista de `"Próximos eventos"` interactiva (permitiendo completarlos en 1 clic y exportar/suscribir `.ics`).
   - Fila de 4 tarjetas de acción rápida debajo y barra de chat inferior tipo píldora para pedidos puntuales.
-- [ ] **3.2.** Levantar la app localmente y verificarla con los MCPs **`playwright`** y **`chrome-devtools`** + skill **`break-ui`**: comprobar 0 errores de consola, que el globo de texto actualiza lo que dice Mate, que la cara del Mate cambia en los 4 estados, que la agenda permite interactuar con los eventos sin solaparse y que usa `textContent` (anti-XSS).
+- [x] **3.2.** Levantar la app localmente y verificarla con los MCPs **`playwright`** y **`chrome-devtools`** + skill **`break-ui`**: comprobar 0 errores de consola, que el globo de texto actualiza lo que dice Mate, que la cara del Mate cambia en los 4 estados, que la agenda permite interactuar con los eventos sin solaparse y que usa `textContent` (anti-XSS).
 - [ ] **3.3. [GATE]** Invocar al subagente **`verificador`** sobre la Fase 3. Solo avanzar si devuelve **APTO**.
+- [ ] **3.4.** Continuar con la Fase 4: Docker endurecido, CI/CD, ADRs, README e integración con portafolio.
+- [ ] **3.5.** Preparar verificaciones finales y documentación de conformidad con las reglas del proyecto.
+- [ ] **3.6.** Mover la Fase 3 a verificado y comenzar la fase de endurecimiento Docker con usuario no-root 1654.
+- [ ] **3.7.** Crear estructura multi-etapa Dockerfile y docker-compose.prod.yml con las restricciones de seguridad especificadas (read_only, cap_drop, tmpfs, red arch-net).
+- [ ] **3.8.** Redactar los primeros ADRs y actualizar el README portafolio con el diagrama Mermaid y el modelo de amenazas OWASP API Top 10.
 
 ### FASE 4: Docker Endurecido, CI/CD, ADRs, README e Integración con Portafolio y Pulso
 - [ ] **4.1.** Crear `Dockerfile` multi-etapa (`python:3.12-slim`, usuario no-root `1654`), `docker-compose.prod.yml` (`container_name: mate-api`, puerto `127.0.0.1:5003:8080`, `mem_limit: 256m`, `cpus: 0.5`, `read_only: true`, `tmpfs: [/tmp]`, `cap_drop: [ALL]`, `no-new-privileges:true`, volumen `./data:/data`, red `arch-net`) y `.env.example`.
