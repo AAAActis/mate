@@ -1,9 +1,10 @@
-// App principal Mate - lógica completa (Zonas 2 y 3)
+// App principal Mate - lógica completa (Zonas 2, 3 y 4)
 
 // Estado global
 let eventSource = null;
 let temaOscuro = false;
 let estadoActual = 'neutro';
+let sesionActual = null;
 
 // Elementos DOM de Zona 2
 const puntitoConexion = document.getElementById('puntito-conexion');
@@ -141,6 +142,117 @@ function conectarSSE() {
   };
 }
 
+// Cargar sesión y renderizar agenda (Zona 4)
+async function cargarAgenda() {
+  try {
+    const respuesta = await fetch('/api/v1/session', {
+      credentials: 'same-origin',
+    });
+
+    if (!respuesta.ok) throw new Error('No se pudo cargar la sesión');
+
+    sesionActual = await respuesta.json();
+
+    // Listar tasks, habits y blocks
+    const listaEventos = document.getElementById('lista-eventos');
+    if (!listaEventos) return;
+
+    listaEventos.innerHTML = '';
+
+    // Tareas
+    if (sesionActual && sesionActual.tasks) {
+      for (const tarea of sesionActual.tasks) {
+        const div = document.createElement('div');
+        div.style = 'padding: 4px 8px; margin: 2px 0; border-radius: 10px; background: var(--bg-card);';
+        div.innerHTML = `
+          <span style="color: var(--yerba-olive);">📋</span> ${tarea.title}
+          <span style="font-size: 0.7rem; color: var(--text-secondary); margin-left: 4px;">${tarea.due_at || ''}</span>
+          <button class="btn-completar" data-tipo="task" data-id="${tarea.id}" style="background: none; border: none; color: var(--yerba-olive); font-size: 0.8rem; margin-left: 8px;">✓</button>
+        `;
+        listaEventos.appendChild(div);
+
+        // Event listener para botón ✓
+        const btnCompletar = div.querySelector('.btn-completar');
+        btnCompletar.addEventListener('click', async () => {
+          const resp = await fetch(`/api/v1/items/task/${tarea.id}/complete`, {
+            method: 'POST',
+            credentials: 'same-origin',
+          });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.ok) {
+              setEstado('contento');
+              decir('¡Bien ahí!');
+            }
+          }
+        });
+      }
+    }
+
+    // Hábitos
+    if (sesionActual && sesionActual.habits) {
+      for (const habit of sesionActual.habits) {
+        const div = document.createElement('div');
+        div.style = 'padding: 4px 8px; margin: 2px 0; border-radius: 10px; background: var(--bg-card);';
+        div.innerHTML = `
+          <span style="color: var(--yerba-olive);">💪</span> ${habit.title}
+          <span style="font-size: 0.7rem; color: var(--text-secondary); margin-left: 4px;">${habit.frequency || ''}</button>
+        `;
+        listaEventos.appendChild(div);
+
+        const btnCompletar = div.querySelector('.btn-completar');
+        if (btnCompletar) {
+          btnCompletar.addEventListener('click', async () => {
+            const resp = await fetch(`/api/v1/items/habit/${habit.id}/complete`, {
+              method: 'POST',
+              credentials: 'same-origin',
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data.ok) {
+                setEstado('contento');
+                decir('¡Bien ahí!');
+              }
+            }
+          });
+        }
+      }
+    }
+
+    // Bloques de calendario
+    if (sesionActual && sesionActual.calendar_blocks) {
+      for (const bloque of sesionActual.calendar_blocks) {
+        const div = document.createElement('div');
+        div.style = 'padding: 4px 8px; margin: 2px 0; border-radius: 10px; background: var(--bg-card);';
+        div.innerHTML = `
+          <span style="color: var(--gourd-brown);">📅</span> ${bloque.title}
+          <span style="font-size: 0.7rem; color: var(--text-secondary); margin-left: 4px;">${bloque.start_at} - ${bloque.end_at || ''}</button>
+        `;
+        listaEventos.appendChild(div);
+
+        const btnCompletar = div.querySelector('.btn-completar');
+        if (btnCompletar) {
+          btnCompletar.addEventListener('click', async () => {
+            const resp = await fetch(`/api/v1/items/calendar_block/${bloque.id}/complete`, {
+              method: 'POST',
+              credentials: 'same-origin',
+            });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data.ok) {
+                setEstado('contento');
+                decir('¡Bien ahí!');
+              }
+            }
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error al cargar agenda:', error);
+  }
+}
+
 // Mostrar mensaje en el globo de diálogo
 function mostrarEnGlobo(mensaje) {
   if (!globoTexto) return;
@@ -201,4 +313,78 @@ btnSimularCumple.addEventListener('click', () => {
   }
   mostrarEnGlobo('✓ Aviso proactivo: cumpleaños en 6 días - recordatorio guardado');
   setEstado('contento');
+});
+
+// --- Zona 4: Tarjeta "Tu agenda" ---
+
+// Cargar agenda al inicializar
+document.addEventListener('DOMContentLoaded', () => {
+  cargarAgenda();
+});
+
+// Abrir diálogo ICS
+btnSimularGym.addEventListener('click', () => {
+  if (eventSource && eventSource.readyState === EventSource.OPEN) {
+    eventSource.send('gym');
+  }
+  mostrarEnGlobo('✓ Aviso proactivo: sesión de gym programada para hoy a las 19:00 hs');
+  setEstado('contento');
+});
+
+btnSimularEstudio.addEventListener('click', () => {
+  if (eventSource && eventSource.readyState === EventSource.OPEN) {
+    eventSource.send('estudio');
+  }
+  mostrarEnGlobo('✓ Aviso proactivo: hora de estudiar Bases de Datos - ¡arrancamos?');
+  setEstado('contento');
+});
+
+// Cerrar diálogo
+btnCerrarDialogo.addEventListener('click', () => {
+  if (dialogPanel) {
+    dialogPanel.close();
+  }
+});
+
+// Botón Suscribir .ics - abre diálogo
+btnIcsSubscribir.addEventListener('click', () => {
+  if (sesionActual && sesionActual.calendar_token) {
+    const urlIcs = `/api/v1/calendar/${sesionActual.calendar_token}.ics`;
+    const display = document.getElementById('ics-url-display');
+    if (display) {
+      display.textContent = urlIcs;
+    }
+    const dialogIcs = document.getElementById('dialog-ics');
+    if (dialogIcs) {
+      dialogIcs.showModal();
+    }
+  }
+});
+
+// Copiar URL del ICS
+btnCopiarIcs.addEventListener('click', () => {
+  const display = document.getElementById('ics-url-display');
+  if (display) {
+    navigator.clipboard.writeText(display.textContent).then(() => {
+      // Feedback visual corto
+      display.style.background = 'var(--yerba-olive)';
+      setTimeout(() => display.style.background = 'var(--bg-sidebar)', 1000);
+    });
+  }
+});
+
+// Revocar token ICS
+btnRevocarIcs.addEventListener('click', () => {
+  fetch('/api/v1/calendar/revoke', {
+    method: 'POST',
+    credentials: 'same-origin',
+  }).then(() => {
+    // Ocultar diálogo y botones
+    const dialogIcs = document.getElementById('dialog-ics');
+    if (dialogIcs) dialogIcs.close();
+    const btnIcsRevocar = document.getElementById('btn-ics-revocar');
+    const btnIcsSuscribir = document.getElementById('btn-ics-subscribir');
+    if (btnIcsRevocar) btnIcsRevocar.style.display = 'none';
+    if (btnIcsSuscribir) btnIcsSuscribir.style.display = 'inline-block';
+  });
 });

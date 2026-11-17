@@ -210,16 +210,27 @@
       <div style="max-height: 200px; overflow-y: auto; background: var(--bg-sidebar); border-radius: 12px; padding: 8px; border: 1px solid var(--border-warm);">
         <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 8px; padding: 4px 8px; border-radius: 10px; background: rgba(85,99,59,0.1);">Próximos eventos</div>
         <div id="lista-eventos" style="font-size: 1rem; color: var(--text-primary);">
-          <div style="padding: 4px 8px; margin: 2px 0; border-radius: 10px; background: var(--bg-card);">
-            <span style="color: var(--yerba-olive);">📚</span> Estudiar Bases de Datos
-            <span style="font-size: 0.7rem; color: var(--text-secondary); margin-left: 4px;">13 nov, 16:00 hs</span>
-          </div>
-          <div style="padding: 4px 8px; margin: 2px 0; border-radius: 10px; background: var(--bg-card);">
-            <span style="color: var(--gourd-brown);">💪</span> Gym - Piernas
-            <span style="font-size: 0.7rem; color: var(--text-secondary); margin-left: 4px;">14 nov, 19:00 hs</span>
-          </div>
+          <!-- Los items se cargan dinámicamente desde GET /api/v1/session -->
         </div>
       </div>
+
+      <!-- Diálogo Suscribir .ics -->
+      <dialog id="dialog-ics" style="max-width: 400px; margin: 20px auto; padding: 24px; background: var(--bg-card); border: 1px solid var(--border-warm); border-radius: 16px; box-shadow: var(--shadow-card); color: var(--text-primary);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <span style="font-size: 1rem; font-weight: 600;">Suscribir agenda .ics</span>
+          <button id="btn-cerrar-ics" style="background: none; color: var(--text-muted); border: none; font-size: 1.5rem; cursor: pointer;">✕</button>
+        </div>
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 16px;">La agenda se suscribirá en tu calendario local.</p>
+        <div id="ics-url-display" style="background: var(--bg-sidebar); padding: 12px; border-radius: 8; margin: 12px 0; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; font-size: 0.8rem; overflow: white-space; color: var(--text-primary);"></div>
+        <div style="display: grid; gap: 8px;">
+          <button id="btn-copiar-ics" style="background: var(--bg-card); border: 1px solid var(--border-warm); padding: 8px; border-radius: 8px; font-size: 0.875rem; color: var(--text-primary); cursor: pointer;" title="Copiar URL">
+            📋 Copiar
+          </button>
+          <button id="btn-revocar-ics" style="background: var(--danger-warm); color: var(--bg-canvas); border: none; padding: 8px; border-radius: 8px; font-size: 0.875rem; color: var(--text-primary); cursor: pointer;" title="Revocar token">
+            🔒 Revocar
+          </button>
+        </div>
+      </dialog>
     </div>
   </aside>
 
