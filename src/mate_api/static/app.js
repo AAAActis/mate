@@ -1,10 +1,11 @@
-// App principal Mate - lógica completa (Zonas 2, 3 y 4)
+// App principal Mate - lógica completa (Zonas 2, 3, 4 y 5)
 
 // Estado global
 let eventSource = null;
 let temaOscuro = false;
 let estadoActual = 'neutro';
 let sesionActual = null;
+let voces = [];
 
 // Elementos DOM de Zona 2
 const puntitoConexion = document.getElementById('puntito-conexion');
@@ -20,8 +21,20 @@ const personajeMate = document.getElementById('personaje-mate');
 
 // Elementos DOM de Zona 3
 const globoTexto = document.getElementById('globo-texto');
+const globoChip = document.getElementById('globo-chip');
 
-// --- Función 1: setEstado(estado) ---
+// Elementos DOM de Zona 4
+const btnIcsSubscribir = document.getElementById('btn-ics-subscribir');
+const btnIcsRevocar = document.getElementById('btn-ics-revocar');
+const btnCopiarIcs = document.getElementById('btn-copiar-ics');
+const displayIcsUrl = document.getElementById('ics-url-display');
+const dialogIcs = document.getElementById('dialog-ics');
+
+// Elementos DOM de Zona 5
+const btnEnviar = document.getElementById('btn-enviar');
+const inputChat = document.getElementById('input-chat');
+
+/// --- Función 1: setEstado(estado) ---
 /**
  * Cambia el estado visual del Mate (data-state en SVG).
  * Estados: 'neutro', 'hablando', 'contento', 'serio'.
@@ -50,7 +63,7 @@ function setEstado(estado) {
   }
 }
 
-// --- Función 2: decir(texto) ---
+/// --- Función 2: decir(texto) ---
 /**
  * Muestra texto en el globo de diálogo y habla con speechSynthesis.
  * Usa idioma es-AR si está disponible, sino español por defecto.
@@ -64,6 +77,9 @@ function decir(texto) {
 
   // Intentar speechSynthesis con es-AR
   if ('speechSynthesis' in window) {
+    if (voces.length === 0) {
+      voces = window.speechSynthesis.getVoices();
+    }
     const voz = voces.find(v => v.lang === 'es-AR') ||
                 voces.find(v => v.lang.startsWith('es')) ||
                voices[0];
@@ -84,17 +100,6 @@ function decir(texto) {
     }
   }
 }
-
-// Estado global SSE
-let voces = [];
-
-// Cargar voces disponibles al iniciar
-document.addEventListener('DOMContentLoaded', () => {
-  if ('speechSynthesis' in window) {
-    voces = window.speechSynthesis.getVoices();
-  }
-  conectarSSE();
-});
 
 // Conectar EventSource a /api/v1/stream
 function conectarSSE() {
@@ -141,6 +146,14 @@ function conectarSSE() {
     setEstado('neutro');
   };
 }
+
+// Cargar voces disponibles al iniciar
+document.addEventListener('DOMContentLoaded', () => {
+  if ('speechSynthesis' in window) {
+    voces = window.speechSynthesis.getVoices();
+  }
+  conectarSSE();
+});
 
 // Cargar sesión y renderizar agenda (Zona 4)
 async function cargarAgenda() {
@@ -315,7 +328,98 @@ btnSimularCumple.addEventListener('click', () => {
   setEstado('contento');
 });
 
-// --- Zona 4: Tarjeta "Tu agenda" ---
+// --- Zona 5: Barra de chat y tarjetas de acción ---
+
+// Función para enviar mensaje al chat (tanto de tarjetas como de input manual)
+async function enviarMensajeChat(textoUsuario) {
+  // Ocultar input y botón durante petición
+  if (inputChat) inputChat.disabled = true;
+  if (btnEnviar) btnEnviar.disabled = true;
+
+  try {
+    const respuesta = await fetch('/api/v1/chat', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ mensaje: textoUsuario }),
+    });
+
+    if (respuesta.status === 429) {
+      // Límite de tokens alcanzado
+      decir('Pará un poco, che, probá en un ratito');
+      setEstado('neutro');
+      return;
+    }
+
+    if (!respuesta.ok) throw new Error('Error en la respuesta');
+
+    const data = await respuesta.json();
+    const reply = data.respuesta || 'Sin respuesta del agente';
+
+    // Mostrar respuesta en globo
+    setEstado('hablando');
+    decir(reply);
+
+    // Después de un delay, actualizar estado y refrescar agenda
+    setTimeout(async () => {
+      // Si hubo herramientas ejecutadas, mostrálas como chips
+      if (data.herramientas_ejecutadas && data.herramientas_ejecutadas.length > 0) {
+        mostrarChipsHerramientas(data.herramientas_ejecutadas);
+      }
+      // Refrescar agenda
+      await cargarAgenda();
+      // Volver al estado neutro después de un momento
+      setEstado('neutro');
+    }, 1500);
+
+  } catch (error) {
+    console.error('Error al enviar mensaje:', error);
+    decir('Hubo un error, che. Intentá de nuevo más tarde.');
+    setEstado('neutro');
+  } finally {
+    // Rehabilitar input y botón
+    if (inputChat) inputChat.disabled = false;
+    if (btnEnviar) btnEnviar.disabled = false;
+    // Limpiar input
+    if (inputChat) inputChat.value = '';
+  }
+}
+
+// Mostrar herramientas ejecutadas como chips debajo del globo
+function mostrarChipsHerramientas(herramientas) {
+  if (!globoChip) return;
+
+  // Limpiar chips anteriores
+  globoChip.innerHTML = '';
+
+  // Crear chips para cada herramienta
+  herramientas.forEach(herramienta => {
+    const chip = document.createElement('span');
+    chip.style = 'display: inline-block; padding: 4px 8px; margin: 2px; background: var(--bg-card); border: 1px solid var(--border-warm); border-radius: 10px; font-size: 0.75rem; color: var(--text-primary);';
+    chip.textContent = `✓ ${herramienta}`;
+    globoChip.appendChild(chip);
+  });
+}
+
+// Event listener para botón enviar (input manual)
+btnEnviar.addEventListener('click', () => {
+  if (inputChat && inputChat.value.trim()) {
+    enviarMensajeChat(inputChat.value.trim());
+  }
+});
+
+// Event listener para Enter en input
+if (inputChat) {
+  inputChat.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      if (inputChat.value.trim()) {
+        enviarMensajeChat(inputChat.value.trim());
+      }
+    }
+  });
+}
 
 // Cargar agenda al inicializar
 document.addEventListener('DOMContentLoaded', () => {
