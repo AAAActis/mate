@@ -466,21 +466,72 @@ class MateAgent:
         return messages
 
     async def process(self, user_message: str, history: List[Dict[str, str]]) -> ChatResponse:
-        """Procesa un mensaje: intenta LLM, cae a fallback si falla."""
+        """Procesa un mensaje: intenta LLM, cae a fallback si falla.
+
+        Modo degradado (§5.4):
+        - Si no hay API key, se agotó el presupuesto o el LLM falla:
+          * Pedidos de rutina (gym, estudio, agenda, tareas, hábitos, cumple) → RuleBasedFallbackAgent.
+          * Pedidos generales (mail, ropa, opiniones, etc.) → respuesta degradada con is_degraded: true, nunca 500.
+        - Caso normal: LLM responde texto sin necesidad de herramientas (§5.3).
+        """
         self.tool_calls_this_turn = 0
 
         # Verificar si hay API key y presupuesto
         settings = get_settings()
-        if not settings.GEMINI_API_KEY or settings.DEMO_ENABLED == "false":
-            logger.info("Modo degradado: sin API key o DEMO_ENABLED=false")
-            return await self.fallback.handle(user_message)
+        is_degraded_mode = not settings.GEMINI_API_KEY or settings.DEMO_ENABLED == "false"
+
+        if is_degraded_mode:
+            # Modo degradado: decidir entre fallback (rutina) y respuesta degradada (general)
+            intent = self.fallback._detect_intent(user_message)
+            routine_intents = {
+                "crear_tarea",
+                "crear_habito",
+                "gym",
+                "estudio",
+                "cumple",
+                "listar_hoy",
+                "schedule",
+            }
+            if intent and intent in routine_intents:
+                logger.info("Modo degradado: pedido rutina, usando RuleBasedFallbackAgent")
+                return await self.fallback.handle(user_message)
+            else:
+                # Pedido general: respuesta degradada específica de §5.4
+                logger.info("Modo degradado: pedido general, respuesta degradada")
+                return ChatResponse(
+                    reply="Ahora estoy sin conexión al cerebro, che. Lo de la agenda lo sigo manejando; para eso probá en un rato.",
+                    avatar_state=AvatarState.NEUTRO,
+                    tools_executed=[],
+                    state_snapshot={},
+                    is_degraded=True,
+                )
 
         # Intentar con LLM
         try:
             return await self._process_with_llm(user_message, history)
         except Exception as e:
             logger.warning(f"LLM falló, usando fallback: {e}")
-            return await self.fallback.handle(user_message)
+            # Después de un fallo del LLM, también aplicar §5.4
+            intent = self.fallback._detect_intent(user_message)
+            routine_intents = {
+                "crear_tarea",
+                "crear_habito",
+                "gym",
+                "estudio",
+                "cumple",
+                "listar_hoy",
+                "schedule",
+            }
+            if intent and intent in routine_intents:
+                return await self.fallback.handle(user_message)
+            else:
+                return ChatResponse(
+                    reply="Ahora estoy sin conexión al cerebro, che. Lo de la agenda lo sigo manejando; para eso probá en un rato.",
+                    avatar_state=AvatarState.NEUTRO,
+                    tools_executed=[],
+                    state_snapshot={},
+                    is_degraded=True,
+                )
 
     async def _process_with_llm(self, user_message: str, history: List[Dict[str, str]]) -> ChatResponse:
         messages = self._build_messages(user_message, history)
