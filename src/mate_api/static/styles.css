@@ -1,294 +1,243 @@
-/* ── Sección 2: Paleta de Colores "Warm Yerba & Organic Paper" ─────────────*/
+/* ── §2 Paleta (valores sin cambios) ─────────────────────────────────────── */
 :root {
-  /* Superficies Crema y Papel Cálido */
-  --bg-canvas: #f3ead8;
-  --bg-sidebar: #f8f2e4;
-  --bg-card: #fbf7ee;
-  --bg-card-hover: #f0e6d2;
-  --bg-accent-soft: #e2e6ce;
-
-  /* Bordes y Sombras Tierra (Cero gris frío) */
-  --border-warm: #dfd3bc;
-  --border-ink: #3a2e24;
-  --shadow-card: 0 8px 24px -4px rgba(62, 47, 35, 0.08), 0 2px 6px -1px rgba(62, 47, 35, 0.04);
-
-  /* Textos */
-  --text-primary: #2c3527;
-  --text-secondary: #5c6454;
-  --text-muted: #848978;
-
-  /* Acentos Yerba Mate y Calabaza */
-  --yerba-olive: #55633b;
-  --yerba-olive-hover: #44502e;
-  --yerba-fresh: #6a8a3a;
-  --gourd-brown: #8c5832;
-  --gourd-dark: #5e371c;
-  --metal-alpaca: #d6d9d8;
-  --status-firm: #c86d28;
-  --danger-warm: #b94a3e;
-
-  /* Tipografía sin CDNs externos (Orgánica y legible) */
-  --font-display: 'ui-rounded', 'Quicksand', 'Nunito', system-ui, -apple-system, sans-serif;
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --bg-canvas:#f3ead8; --bg-sidebar:#f8f2e4; --bg-card:#fbf7ee; --bg-card-hover:#f0e6d2;
+  --bg-accent-soft:#e2e6ce; --border-warm:#dfd3bc; --border-ink:#3a2e24;
+  --shadow-card:0 8px 24px -4px rgba(62,47,35,.08),0 2px 6px -1px rgba(62,47,35,.04);
+  --text-primary:#2c3527; --text-secondary:#5c6454; --text-muted:#848978;
+  --yerba-olive:#55633b; --yerba-olive-hover:#44502e; --yerba-fresh:#6a8a3a; --leaf:#8a9a5b;
+  --gourd:#9a5f33; --gourd-shade:#7a4724; --gourd-dark:#5e371c; --metal-alpaca:#d6d9d8;
+  --mouth:#5e2a1a; --tongue:#d9776b; --cheek:#e58e74; --status-firm:#c86d28; --danger-warm:#b94a3e;
+  --font-display: ui-rounded, "Nunito", "Quicksand", system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ease: cubic-bezier(.22,1,.36,1);
 }
 
-/* Tema opcional: Noche Matera */
+/* Tema oscuro: solo si el usuario toca la luna (§1.1) */
 [data-theme="dark-yerba"] {
-  --bg-canvas: #1a2118;
-  --bg-sidebar: #21291e;
-  --bg-card: #283225;
-  --bg-card-hover: #323e2e;
-  --bg-accent-soft: #243020;
-  --border-warm: #394634;
-  --border-ink: #11160f;
-  --text-primary: #f3ead8;
-  --text-secondary: #b8c2ad;
-  --text-muted: #849178;
-  --yerba-olive: #6c8049;
+  --bg-canvas:#1a2118; --bg-sidebar:#21291e; --bg-card:#283225; --bg-card-hover:#323e2e;
+  --bg-accent-soft:#243020; --border-warm:#394634; --border-ink:#11160f;
+  --text-primary:#f3ead8; --text-secondary:#b8c2ad; --text-muted:#849178;
+  --yerba-olive:#6c8049;
 }
 
-/* ── Reset básico ───────────────────────────────────────────────────────────*/
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-body {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 14px; /* 14px minimum for body readability per WCAG */
-}
-
-/* ── Cuerpo principal ───────────────────────────────────────────────────────*/
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
 body {
   background: var(--bg-canvas);
   color: var(--text-primary);
   font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+}
+h1, h2, p { margin: 0; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--yerba-olive); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.icon { width: 20px; height: 20px; flex: none; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+.card {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-warm);
+  border-radius: 20px;
+  box-shadow: var(--shadow-card);
 }
 
-/* ── focus-visible impecable ────────────────────────────────────────────────*/
-:focus-visible {
-  outline: 2px solid var(--yerba-olive);
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-card); border: 1.5px solid var(--border-warm); border-radius: 999px;
+  transition: background 200ms var(--ease), border-color 200ms var(--ease);
+}
+.btn:hover { background: var(--bg-card-hover); }
+.btn-primary { background: var(--yerba-olive); border-color: var(--yerba-olive); color: #fbf7ee; font-weight: 600; }
+.btn-primary:hover { background: var(--yerba-olive-hover); border-color: var(--yerba-olive-hover); }
+.btn-small { padding: 4px 10px; font-size: 13px; }
+.btn-danger { background: var(--danger-warm); border-color: var(--danger-warm); color: #fbf7ee; }
+
+.icon-btn {
+  display: inline-grid; place-items: center; width: 36px; height: 36px;
+  background: none; border: 1.5px solid var(--border-warm); border-radius: 999px;
+}
+.icon-btn:hover { background: var(--bg-card-hover); }
+
+/* ── §3 Layout desktop ────────────────────────────────────────────────────── */
+body {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+.mobile-bar, .backdrop { display: none; }
+
+/* Sidebar */
+.sidebar {
+  display: flex; flex-direction: column; gap: 20px;
+  padding: 24px 18px;
+  background: var(--bg-sidebar);
+  border-right: 1.5px solid var(--border-warm);
+  overflow-y: auto;
+  min-height: 0;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-mark { width: 40px; height: 40px; border-radius: 50%; background: var(--gourd); flex: none; }
+.brand-title { font-family: var(--font-display); font-size: 24px; font-weight: 800; }
+.brand-sub { font-size: 13px; color: var(--text-secondary); }
+.side-section { display: flex; flex-direction: column; gap: 6px; }
+.side-title { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.side-text { color: var(--text-secondary); font-size: 14px; }
+.ejemplo {
+  text-align: left; padding: 8px 12px;
+  background: none; border: 1.5px solid transparent; border-radius: 12px;
+  color: var(--text-secondary); font-size: 14px;
+  transition: background 200ms var(--ease), border-color 200ms var(--ease);
+}
+.ejemplo:hover { background: var(--bg-card); border-color: var(--border-warm); color: var(--text-primary); }
+.side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.perfil { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--bg-accent-soft); }
+.tonos { display: flex; gap: 6px; }
+.tono { flex: 1; padding: 6px 10px; background: none; border: 1.5px solid var(--border-warm); border-radius: 999px; font-size: 13px; }
+.tono[aria-pressed="true"][data-tono="amable"] { background: var(--yerba-olive); border-color: var(--yerba-olive); color: #fbf7ee; }
+.tono[aria-pressed="true"][data-tono="firme"] { background: var(--status-firm); border-color: var(--status-firm); color: #fbf7ee; }
+
+/* Main: 48px / 1fr / 88px / 56px */
+.main {
+  display: grid;
+  grid-template-rows: 48px 1fr 88px 56px;
+  gap: 20px;
+  padding: 24px;
+  min-height: 0;
+  min-width: 0;
 }
 
-/* ── Layout principal ───────────────────────────────────────────────────────*/
-@media (min-width: 900px) {
-  body {
-    display: grid;
-    grid-template-columns: 250px 1fr 310px;
-    grid-template-rows: auto 1fr auto;
-    gap: 16px;
-  }
+.topbar { display: flex; align-items: center; justify-content: space-between; }
+.estado-conexion, .topbar-acciones { display: flex; align-items: center; gap: 10px; }
+.puntito { width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); }
+.puntito.online { background: var(--yerba-fresh); }
+#texto-conexion, .cuota { color: var(--text-secondary); font-size: 14px; }
 
-  /* Zona 1: Sidebar izquierda */
-  #zona-1.sidebar {
-    grid-row: 1 / 3;
-    background: var(--bg-sidebar);
-    border-right: 1.5px solid var(--border-warm);
-  }
-
-  /* Estilos de los botones dentro de la sidebar */
-  #zona-1.sidebar button {
-    width: 100%;
-    background: none;
-    border: none;
-    text-align: left;
-    padding: 8px 12px;
-    font-size: 0.875rem; /* 14px at 16px root */
-    color: var(--text-primary);
-    cursor: pointer;
-    border-radius: 14px;
-    margin: 4px 0;
-    transition: background 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  #zona-1.sidebar button:hover {
-    background: var(--bg-card-hover);
-    color: var(--text-primary);
-  }
-
-  #zona-1.sidebar button.rutina {
-    border: 1px solid var(--border-warm);
-    border-radius: 14px;
-    padding: 10px 12px;
-    font-size: 0.85rem;
-    color: var(--text-primary);
-    background: var(--bg-card);
-    margin: 4px 0;
-    transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  #zona-1.sidebar button.rutina:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--yerba-olive);
-    color: var(--yerba-olive);
-  }
-
-  #zona-1.sidebar button#btn-nueva {
-    background: var(--yerba-olive);
-    color: #fff;
-    font-weight: bold;
-    padding: 10px;
-    border-radius: 999px;
-    margin: 12px 0;
-    border: none;
-    font-size: 0.9rem;
-  }
-
-  #zona-1.sidebar button#btn-borrar {
-    background: none;
-    color: var(--text-primary);
-    padding: 8px 12px;
-    border: 1px solid var(--border-warm);
-    border-radius: 14px;
-    margin: 4px 0;
-    font-size: 0.85rem;
-  }
-
-  #zona-1.sidebar button#btn-borrar:hover {
-    background: var(--bg-card-hover);
-  }
-
-  #zona-1.sidebar .rutina[data-action="memoria"] {
-    background: var(--bg-card);
-    border: 1px solid var(--border-warm);
-    border-radius: 14px;
-    padding: 10px 12px;
-    font-size: 0.85rem;
-    color: var(--text-primary);
-    margin: 4px 0;
-  }
-
-  #zona-1.sidebar .rutina[data-action="memoria"]:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--yerba-olive);
-    color: var(--yerba-olive);
-  }
-
-  #zona-1.sidebar #resumen-agenda {
-    padding: 12px;
-    background: var(--bg-card);
-    border-radius: 14px;
-    margin: 12px 0;
-    color: var(--text-primary);
-    font-size: 0.85rem;
-  }
-
-  #zona-1.sidebar #resumen-agenda p {
-    margin: 4px 0;
-  }
-
-  #zona-1.sidebar .tono {
-    background: none;
-    border: 1px solid var(--border-warm);
-    border-radius: 14px;
-    padding: 6px 12px;
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    margin: 2px 0;
-    cursor: pointer;
-    transition: all 200ms cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  #zona-1.sidebar .tono:hover {
-    background: var(--bg-card-hover);
-    border-color: var(--yerba-olive);
-    color: var(--yerba-olive);
-  }
-
-  #zona-1.sidebar .tono[data-tono="firme"] {
-    background: #a04c16;
-    color: var(--bg-canvas);
-    border-color: #a04c16;
-    text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
-  }
-
-  /* Estados del Mate (Zona 3) */
-  /* Los estilos se aplican vía data-state en el SVG del personaje */
-  /* Ojos y boca cambian según el estado activo */
-
-  @media (prefers-reduced-motion: no-preference) {
-    /* Animaciones solo si el usuario no las ha reducido */
-  }
+.fila-medio {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 20px;
+  min-height: 0;
 }
 
-/* ── Estados del Mate (Zona 3) ───────────────────────────────────────────────*/
-/* Los estilos de ojos y boca se aplican vía[data-state] en el SVG */
-[data-state="neutro"] .ojos,
-[data-state="serio"] .ojos {
-  /* Estilos por defecto - sobreescritos por CSS específico por estado */
+.escenario {
+  display: flex; align-items: center; justify-content: center; gap: 28px;
+  padding: 24px;
+  min-height: 0; min-width: 0;
+  overflow: hidden;
 }
-
-[data-state="contento"] .ojos {
-  /* Ojos arqueados felices ^ ^ */
+/* Lugar reservado para el SVG del Mate (300px de ancho, viewBox 240×260) */
+.mate { width: 300px; aspect-ratio: 240 / 260; flex: none; }
+.globo {
+  position: relative;
+  max-width: 360px;
+  padding: 18px 22px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-ink);
+  border-radius: 20px;
 }
+#globo-texto { font-family: var(--font-display); font-size: 20px; font-weight: 700; white-space: pre-wrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { padding: 2px 10px; border: 1.5px solid var(--border-warm); border-radius: 999px; font-size: 12px; color: var(--text-secondary); }
 
-[data-state="hablando"] .ojos {
-  /* Ojos ligeramente entrecerrados */
+.agenda { display: flex; flex-direction: column; gap: 12px; padding: 18px; min-height: 0; }
+.agenda-head { display: flex; align-items: center; justify-content: space-between; }
+.agenda-head h2 { font-size: 16px; }
+.lista-agenda { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; }
+.item-agenda {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-sidebar); border: 1.5px solid var(--border-warm); border-radius: 12px;
 }
+.item-agenda .titulo { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.item-agenda .meta { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.item-agenda.hecho .titulo { text-decoration: line-through; color: var(--text-muted); }
+.btn-check { display: grid; place-items: center; width: 28px; height: 28px; background: none; border: 1.5px solid var(--border-warm); border-radius: 50%; color: var(--yerba-olive); }
+.btn-check:hover { background: var(--bg-accent-soft); }
+.agenda-vacia { color: var(--text-muted); font-size: 14px; }
 
-[data-state="contento"] .boca {
-  /* Boca sonriente amplia, trazo más grueso */
-  stroke-width: 4;
+.tarjetas {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  min-height: 0;
 }
-
-[data-state="serio"] .boca {
-  /* Boca recta firme */
-  stroke-width: 2;
+.tarjeta {
+  display: flex; align-items: center; gap: 12px;
+  height: 88px; padding: 0 18px;
+  text-align: left; font-weight: 600;
+  color: var(--text-primary);
+  transition: background 200ms var(--ease), border-color 200ms var(--ease);
 }
+.tarjeta .icon { color: var(--yerba-olive); }
+.tarjeta:hover { background: var(--bg-card-hover); border-color: var(--yerba-olive); }
 
-[data-state="hablando"] .boca {
-  /* Boca para animación de habla */
-  animation: hablar 300ms ease-in-out infinite;
+.chatbar {
+  display: flex; align-items: center; gap: 10px;
+  height: 56px; padding: 0 8px 0 20px;
+  border-radius: 999px;
 }
+.chatbar input { flex: 1; min-width: 0; height: 100%; background: none; border: none; outline: none; font-size: 16px; }
+.chatbar:focus-within { border-color: var(--yerba-olive); }
+.chatbar .btn-primary { width: 40px; height: 40px; padding: 0; }
 
-/* Keyframes de habla - solo si no hay prefers-reduced-motion */
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes hablar {
-    0%, 100% { stroke-dashoffset: 0; }
-    50% { stroke-dashoffset: -20; }
-  }
+dialog {
+  max-width: 420px; width: calc(100% - 32px);
+  padding: 24px;
+  background: var(--bg-card); color: var(--text-primary);
+  border: 1.5px solid var(--border-warm); border-radius: 20px;
+  box-shadow: var(--shadow-card);
 }
+dialog::backdrop { background: rgba(44,53,39,.35); }
+dialog h2 { font-size: 18px; margin-bottom: 8px; }
+dialog p { color: var(--text-secondary); margin-bottom: 12px; }
+dialog code { display: block; padding: 10px; margin-bottom: 12px; background: var(--bg-sidebar); border-radius: 10px; overflow-wrap: anywhere; font-size: 13px; }
+.dialog-acciones { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 
-/* Zona 2: Escenario central */
-  #zona-3.stage {
-    grid-column: 2;
-    grid-row: 2;
-    background: var(--bg-card);
-  }
-
-  /* Zona 4: Agenda derecha */
-  #zona-4.agenda {
-    grid-column: 3;
-    grid-row: 1 / 3;
-    background: var(--bg-card);
-  }
-
-  /* Zona 5: Acciones debajo del escenario */
-  #zona-5.actions {
-    grid-column: 1 / 4;
-    grid-row: 3;
-    background: var(--bg-card-hover);
-  }
-}
-
+/* ── §3 Mobile (< 900px): una columna con scroll ─────────────────────────── */
 @media (max-width: 899px) {
-  body {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
+  body { display: block; height: auto; overflow: auto; }
 
-  #zona-1.sidebar,
-  #zona-2.topbar,
-  #zona-3.stage,
-  #zona-4.agenda,
-  #zona-5.actions {
-    width: 100%;
+  .mobile-bar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 56px; padding: 0 16px;
+    background: var(--bg-sidebar);
+    border-bottom: 1.5px solid var(--border-warm);
   }
+  .logo-mini { font-family: var(--font-display); font-size: 20px; font-weight: 800; }
 
-  #zona-3.stage,
-  #zona-4.agenda,
-  #zona-5.actions {
-    background: var(--bg-card);
+  /* Drawer: oculto por defecto, sin depender de JS */
+  .sidebar {
+    position: fixed; inset: 0 auto 0 0; z-index: 30;
+    width: min(300px, 85vw);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 250ms var(--ease), visibility 0s linear 250ms;
   }
+  .sidebar.abierta { transform: none; visibility: visible; transition: transform 250ms var(--ease); }
+  .backdrop { display: block; position: fixed; inset: 0; z-index: 20; background: rgba(44,53,39,.35); }
+
+  .main { display: flex; flex-direction: column; gap: 16px; padding: 16px; }
+  .fila-medio { display: contents; }
+  .topbar { order: 0; }
+  .escenario { order: 1; flex-direction: column; gap: 16px; }
+  .chatbar { order: 2; }
+  .tarjetas { order: 3; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .agenda { order: 4; }
+
+  .mate { width: min(300px, 70vw); }
+  .tarjeta { height: 88px; }
+  .cuota { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }
