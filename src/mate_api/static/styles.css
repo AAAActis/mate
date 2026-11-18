@@ -133,19 +133,140 @@ body {
   min-height: 0; min-width: 0;
   overflow: hidden;
 }
-/* Lugar reservado para el SVG del Mate (300px de ancho, viewBox 240×260) */
-.mate { width: 300px; aspect-ratio: 240 / 260; flex: none; }
-.globo {
+/* ── §7 Fondo del escenario ────────────────────────────────────────────────── */
+.escenario {
   position: relative;
-  max-width: 360px;
-  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 24px;
+  border-radius: 24px;
+  overflow: hidden;
+  min-height: 0; min-width: 0;
+}
+
+/* Fondo del escenario: manchas suaves y hojas de yerba */
+.escenario::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--bg-accent-soft);
+  border-radius: inherit;
+  filter: blur(80px);
+  mask: /* mancha central */
+    radial-gradient(ellipse at 35% 55%, transparent 0, var(--bg-accent-soft) 50%),
+    radial-gradient(ellipse at 70% 30%, transparent 0, var(--bg-accent-soft) 50%);
+}
+.escenario .hojas-yerba {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.escenario .hojas-yerba path:first-child {
+  fill: var(--leaf);
+  opacity: .55;
+  transform: rotate(-30deg) scale(0.8);
+}
+.escenario .hojas-yerba path:nth-child(2) {
+  fill: var(--leaf);
+  opacity: .55;
+  transform: rotate(20deg) scale(1.0);
+}
+.escenario .hojas-yerba path:nth-child(3) {
+  fill: var(--leaf);
+  opacity: .55;
+  transform: rotate(70deg) scale(1.1);
+}
+.escenario .hojas-yerba path:nth-child(4) {
+  fill: var(--leaf);
+  opacity: .55;
+  transform: rotate(-50deg) scale(0.9);
+}
+.escenario .hojas-yerba .nervadura {
+  stroke: #6f7f45;
+  stroke-width: 2;
+}
+
+/* ── §7 Globo de diálogo ──────────────────────────────────────────────────── */
+.glogo {
+  position: relative;
+  max-width: 440px;
+  min-width: 260px;
   background: var(--bg-card);
   border: 2px solid var(--border-ink);
-  border-radius: 20px;
+  border-radius: 28px;
+  padding: 24px 28px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  word-wrap: break-word;
 }
-#globo-texto { font-family: var(--font-display); font-size: 20px; font-weight: 700; white-space: pre-wrap; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.chip { padding: 2px 10px; border: 1.5px solid var(--border-warm); border-radius: 999px; font-size: 12px; color: var(--text-secondary); }
+.glogo::before {
+  content: "";
+  position: absolute;
+  left: 30px;
+  bottom: -9px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 9px 9px 9px;
+  border-color: var(--border-ink) transparent transparent transparent;
+  display: block;
+  width: 0;
+}
+.glogo-texto-corto {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1.25;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+.glogo-texto-largo {
+  font-size: 1rem;
+  font-weight: 400;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow: auto;
+  color: var(--text-primary);
+}
+.glogo .copiar-btn {
+  margin-top: 8px;
+  align-self: flex-end;
+  padding: 6px 12px;
+  background: var(--bg-accent-soft);
+  border: 1.5px solid var(--border-warm);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 200ms var(--ease);
+}
+.glogo .copiar-btn:hover { background: var(--border-warm); }
+.glogo .copiar-btn:focus-visible { outline: 2px solid var(--yerba-olive); outline-offset: 2px; }
+.glogo-chips {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.glogo-chip {
+  padding: 2px 10px;
+  background: var(--bg-accent-soft);
+  border: 1.5px solid var(--border-warm);
+  border-radius: 999px;
+}
+.glogo-texto-user {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: -8px;
+  margin-bottom: 4px;
+}
 
 .agenda { display: flex; flex-direction: column; gap: 12px; padding: 18px; min-height: 0; }
 .agenda-head { display: flex; align-items: center; justify-content: space-between; }

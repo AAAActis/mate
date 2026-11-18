@@ -26,7 +26,37 @@ function setEstado(estado) {
   $('mate').setAttribute('data-state', ESTADOS.includes(estado) ? estado : 'neutro');
 }
 function decir(texto, estado = 'hablando') {
-  $('globo-texto').textContent = texto;
+  const esLargo = texto.length > 90;
+  const corto = $('globo-texto');
+  const largo = $('globo-texto-largo');
+  const copiarBtn = document.querySelector('.copiar-btn');
+
+  // Mostrar/ocultar según largo/corto
+  corto.hidden = esLargo;
+  largo.hidden = !esLargo;
+  copiarBtn.hidden = !esLargo;
+
+  if (esLargo) {
+    largo.textContent = texto;
+    // Animación palabra por palabra (35 ms por palabra)
+    const palabras = texto.split(' ');
+    largo.innerHTML = '';
+    for (const [i, p] of palabras.entries()) {
+      const span = document.createElement('span');
+      span.style.transition = 'opacity 240ms var(--ease)';
+      span.style.opacity = i === 0 ? '1' : '0';
+      span.textContent = p + ' ';
+      largo.appendChild(span);
+    }
+    // Trigger reflow for animation
+    largo.offsetWidth;
+    for (const span of largo.children) {
+      span.style.opacity = '1';
+    }
+  } else {
+    corto.textContent = texto;
+  }
+
   setEstado(estado);
 }
 function mostrarChips(herramientas) {
@@ -126,6 +156,20 @@ document.querySelectorAll('.tono').forEach((b) => b.addEventListener('click', as
   });
   if (resp.ok) marcarTono((await resp.json()).tone);
 }));
+
+// ── Copiar globo ─────────────────────────────────────────────────────────────
+document.querySelector('.copiar-btn')?.addEventListener('click', () => {
+  const texto = $('globo-texto-largo').textContent;
+  navigator.clipboard?.writeText(texto);
+  const btn = document.querySelector('.copiar-btn');
+  const textoOriginal = btn.textContent;
+  btn.textContent = '¡Copiado!';
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = textoOriginal;
+    btn.disabled = false;
+  }, 2000);
+});
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 async function enviar(texto) {

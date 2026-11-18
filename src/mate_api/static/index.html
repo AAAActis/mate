@@ -73,7 +73,16 @@
     </header>
 
     <div class="fila-medio">
-      <section class="escenario card" aria-label="Mate">
+      <section class="escenario" aria-label="Mate">
+        <!-- Fondo del escenario: manchas y hojas de yerba -->
+        <div class="hojas-yerba">
+          <svg class="hojas-yerba" viewBox="0 0 200 200">
+            <path d="M0 0 C20 -30 60 -30 80 0 C60 30 20 30 0 0 Z" class="nervadura"/>
+            <path d="M0 0 C20 -30 60 -30 80 0 C60 30 20 30 0 0 Z"/>
+            <path d="M0 0 C20 -30 60 -30 80 0 C60 30 20 30 0 0 Z"/>
+            <path d="M0 0 C20 -30 60 -30 80 0 C60 30 20 30 0 0 Z"/>
+          </svg>
+        </div>
         <!-- SVG del Mate (sección §6) -->
 <svg id="mate" data-state="neutro" viewBox="0 0 240 260" role="img" aria-label="Mate, tu asistente" class="mate-svg">
   <!-- bombilla -->
@@ -107,8 +116,11 @@
   <g class="brazos brazos-jarra" style="display:none;">   <path d="M66 168 Q44 184 62 204"/><circle cx="64" cy="206" r="9"/><path d="M174 168 Q196 184 178 204"/><circle cx="176" cy="206" r="9"/></g>
 </svg>
         <div id="globo" class="globo" aria-live="polite">
-          <p id="globo-texto"></p>
-          <div id="globo-chips" class="chips"></div>
+          <p id="globo-texto" class="globo-texto-corto"></p>
+          <p id="globo-texto-largo" class="globo-texto-largo hidden"></p>
+          <button class="copiar-btn" hidden>Copiar</button>
+          <div id="globo-chips" class="globo-chips"></div>
+          <p class="globo-texto-user" hidden></p>
         </div>
       </section>
 
