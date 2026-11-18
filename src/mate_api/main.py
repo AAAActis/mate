@@ -47,6 +47,7 @@ from .database import (
     delete_session,
     purge_expired_sessions,
     update_session_last_seen,
+    update_session_expires_at,
     complete_task,
     complete_habit,
     get_habit,
@@ -219,6 +220,30 @@ async def rate_limit_middleware(request: Request, call_next):
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Helpers: último mensaje assistant para evitar duplicar saludo
+# ──────────────────────────────────────────────────────────────────────
+
+
+async def _ultimo_mensaje_assistant(session_id: str) -> Optional[dict]:
+    """Retorna el último mensaje de assistant para la sesión, o None."""
+    from .database import get_connection
+
+    async with get_connection() as conn:
+        row = await conn.execute(
+            """
+            SELECT content FROM messages
+            WHERE session_id = ? AND role = 'assistant'
+            ORDER BY id DESC LIMIT 1
+            """,
+            (session_id,),
+        )
+        row = await row.fetchone()
+        if not row:
+            return None
+        return {"content": row["content"]}
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Helpers: Problem Details (RFC 9457)
 # ──────────────────────────────────────────────────────────────────────
 
@@ -259,8 +284,10 @@ async def get_or_create_session_id(
         session = await get_session(mate_sid)
         if session:
             # Renovar last_seen_utc y expires_at_utc en la base de datos
+            # (venimiento deslizante: 30 días desde última escritura, como máximo una por hora por sesión)
             await update_session_last_seen(mate_sid)
-            # Renovar cookie con Max-Age deslizante
+            await update_session_expires_at(mate_sid)
+            # Renovar cookie con Max-Age deslizante (30 días = 2592000 segundos)
             response.set_cookie(
                 key=SESSION_COOKIE_NAME,
                 value=mate_sid,
@@ -350,11 +377,19 @@ async def get_session_state(
     # Get habits and blocks for greeting
     habits = await list_habits(session_id)
     blocks = await list_blocks_today(session_id)
+    memories = await list_memories(session_id)
     from .database import get_session as get_db_session
     db_session = await get_db_session(session_id)
     session_tone = Tone(db_session.tone) if db_session else Tone.AMABLE
-    greeting = build_greeting(db_session, habits, blocks, now, session_tone) if db_session else None
+    greeting = build_greeting(db_session, habits, blocks, memories, now, session_tone) if db_session else None
     display_name = db_session.display_name if db_session else None
+
+    # Evitar duplicar el saludo en messages al recargar la página.
+    # Sólo guardamos el saludo si cambió respecto del último mensaje assistant guardado.
+    if greeting:
+        last_assistant = await _ultimo_mensaje_assistant(session_id)
+        if not last_assistant or last_assistant["content"] != greeting["text"]:
+            await create_message(session_id, "assistant", greeting["text"], None)
 
     return {
         "session": session_data.model_dump() if hasattr(session_data, "model_dump") else session_data,

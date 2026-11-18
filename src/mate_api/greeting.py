@@ -1,12 +1,9 @@
 """Saludo determinístico al volver al usuario. Sin LLM, testeable."""
-
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
-from .database import list_memories
-from .models import HabitRead, CalendarBlockRead, Tone
+from typing import Optional
 
 
 MAX_GREETING_AGE_HOURS = 6  # Para la regla "vuelve después de 6h sin pending"
@@ -35,18 +32,44 @@ def _days_between(event_date: Optional[str], now_date: datetime) -> Optional[int
         return None
 
 
+def _hoy_paso_hora(preferred_time: str, now: datetime, today_str: str) -> bool:
+    """Devuelve True si ya pasó la hora preferida de hoy."""
+    try:
+        parts = preferred_time.split(":")
+        preferred_h = int(parts[0])
+        preferred_m = int(parts[1]) if len(parts) > 1 else 0
+        now_hour = now.hour
+        now_minute = now.minute
+        # Si la hora preferida ya pasó hoy
+        if now_hour > preferred_h:
+            return True
+        if now_hour == preferred_h and now_minute >= preferred_m:
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def build_greeting(
     session,
-    habits: list[HabitRead],
-    blocks: list[CalendarBlockRead],
+    habits: list,
+    blocks: list,
+    memories: list,
     now: datetime,
-    tone: Tone = Tone.AMABLE,
+    tone: str = "amable",
 ) -> dict:
     """Construye el saludo determinístico.
 
-    Regla 1-6 (primera que aplique). session puede ser None (sesión nueva).
-    Devuelve dict {text, avatar_state, reason}.
+    Reglas (primera que aplique):
+    1. Bloque o recordatorio que empieza en las próximas 2 h
+    2. Hábito que toca hoy y ya pasó su hora sin cumplimiento
+    3. Memory con event_date dentro de 7 días
+    4. Algo agendado para mañana
+    5. Usuario que vuelve (>6h sin pending) y sin pendientes
+    6. Sesión nueva
+
     Siempre incluye display_name si está disponible.
+    Devuelve dict {text, avatar_state, reason}.
     """
 
     display_name = getattr(session, "display_name", None) if session else None
@@ -56,33 +79,11 @@ def build_greeting(
     hours_since_last = None
     if last_seen_iso:
         try:
-            from datetime import datetime as _dt
-            last_dt = _dt.fromisoformat(last_seen_iso.replace("Z", "+00:00"))
+            last_dt = datetime.fromisoformat(last_seen_iso.replace("Z", "+00:00"))
             delta = now - last_dt
             hours_since_last = delta.total_seconds() / 3600
         except Exception:
             hours_since_last = None
-
-    # Si no hay sesión (nueva), regla 6
-    if session is None:
-        text = "¡Hola! Soy Mate. Contame tus rutinas, fechas importantes o pedime lo que necesites."
-        avatar_state = "contento"
-        if display_name:
-            text = f"¡Hola, {display_name}! {text}"
-        return {"text": text, "avatar_state": avatar_state, "reason": "nueva_sesión"}
-
-    # Regla 5: Usuario que vuelve (>6h sin pending) y sin pendientes
-    if hours_since_last is not None and hours_since_last > MAX_GREETING_AGE_HOURS:
-        # Revisar si hay hábitos pendientes o bloques próximos
-        tiene_pendientes = any(
-            not h.completed for h in habits
-        ) or len(blocks) > 0
-        if not tiene_pendientes:
-            text = "¡Volviste! ¿En qué te doy una mano hoy?"
-            avatar_state = "contento"
-            if display_name:
-                text = f"¡Hola, {display_name}! {text}"
-            return {"text": text, "avatar_state": avatar_state, "reason": "vuelve_sin_pendientes"}
 
     # Regla 1: Bloque o recordatorio que empieza en las próximas 2 horas
     two_hours_from_now = now + timedelta(hours=2)
@@ -106,13 +107,12 @@ def build_greeting(
     for habit in habits:
         if habit.preferred_time and _hoy_paso_hora(habit.preferred_time, now, today_str) and not habit.completed:
             text = f"¿Fuiste hoy {habit.name}?"
-            avatar_state = "serio" if tone.value == "firme" else "contento"
+            avatar_state = "serio" if tone == "firme" else "contento"
             if display_name:
                 text = f"¡Hola, {display_name}! {text}"
             return {"text": text, "avatar_state": avatar_state, "reason": "hábito_pendiente_hoy"}
 
     # Regla 3: Memory con event_date dentro de 7 días
-    memories = await _list_memories_quick(session.session_id if session else "")
     for memory in memories:
         delta = _days_between(memory.event_date, now)
         if delta is not None and 0 <= delta <= 7:
@@ -147,34 +147,22 @@ def build_greeting(
         except Exception:
             continue
 
-    # Regla 6 (fallback): Sesión nueva o genérico
+    # Regla 5: Usuario que vuelve (>6h sin pending) y sin pendientes
+    if hours_since_last is not None and hours_since_last > MAX_GREETING_AGE_HOURS:
+        # Revisar si hay hábitos pendientes o bloques próximos
+        tiene_pendientes = any(
+            not h.completed for h in habits
+        ) or len(blocks) > 0
+        if not tiene_pendientes:
+            text = "¡Volviste! ¿En qué te doy una mano hoy?"
+            avatar_state = "contento"
+            if display_name:
+                text = f"¡Hola, {display_name}! {text}"
+            return {"text": text, "avatar_state": avatar_state, "reason": "vuelve_sin_pendientes"}
+
+    # Regla 6 (fallback): Sesión nueva
     text = "¡Hola! Soy Mate. Contame tus rutinas, fechas importantes o pedime lo que necesites."
     avatar_state = "contento"
     if display_name:
         text = f"¡Hola, {display_name}! {text}"
     return {"text": text, "avatar_state": avatar_state, "reason": "nueva_sesión"}
-
-
-def _hoy_paso_hora(preferred_time: str, now: datetime, today_str: str) -> bool:
-    """Devuelve True si ya pasó la hora preferida de hoy."""
-    try:
-        parts = preferred_time.split(":")
-        preferred_h = int(parts[0])
-        preferred_m = int(parts[1]) if len(parts) > 1 else 0
-        now_hour = now.hour
-        now_minute = now.minute
-        # Si la hora preferida ya pasó hoy
-        if now_hour > preferred_h:
-            return True
-        if now_hour == preferred_h and now_minute >= preferred_m:
-            return True
-        return False
-    except Exception:
-        return False
-
-
-async def _list_memories_quick(session_id: str) -> list:
-    """Lista rápida de memories para la regla del saludo."""
-    if not session_id:
-        return []
-    return await list_memories(session_id)
