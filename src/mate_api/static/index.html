@@ -74,8 +74,38 @@
 
     <div class="fila-medio">
       <section class="escenario card" aria-label="Mate">
-        <!-- El dibujo del Mate se agrega en la próxima tarea (§6) -->
-        <div id="mate" class="mate" data-state="neutro" aria-hidden="true"></div>
+        <!-- SVG del Mate (sección §6) -->
+<svg id="mate" data-state="neutro" viewBox="0 0 240 260" role="img" aria-label="Mate, tu asistente" class="mate-svg">
+  <!-- bombilla -->
+  <g class="bombilla">
+    <line x1="152" y1="18" x2="128" y2="96" stroke="#c9ccc9" stroke-width="9"/>
+    <rect x="144" y="10" width="18" height="10" rx="3" fill="#d6d9d8"/>
+    <line x1="146" y1="40" x2="141" y2="56" stroke="#a9adab" stroke-width="9"/>
+  </g>
+  <!-- cuerpo / porongo -->
+  <path class="cuerpo" fill="var(--gourd)" d="M64 104 C40 140 38 205 80 232 C105 248 135 248 160 232 C202 205 200 140 176 104 Z"/>
+  <path class="sombra" fill="var(--gourd-shade)" opacity=".45" stroke="none" d="M160 112 C186 150 188 205 150 236 C175 214 182 160 160 112 Z"/>
+  <!-- virola de alpaca + yerba -->
+  <rect x="60" y="88" width="120" height="18" rx="9" fill="var(--metal-alpaca)"/>
+  <ellipse cx="120" cy="90" rx="52" ry="8" fill="var(--yerba-fresh)"/>
+  <!-- mejillas -->
+  <ellipse cx="86" cy="172" rx="10" ry="6" fill="var(--cheek)" opacity=".55" stroke="none"/>
+  <ellipse cx="154" cy="172" rx="10" ry="6" fill="var(--cheek)" opacity=".55" stroke="none"/>
+  <!-- OJOS: un grupo por estado -->
+  <g class="ojos ojos-abiertos">  <circle cx="98" cy="150" r="8" fill="#3a2e24"/><circle cx="142" cy="150" r="8" fill="#3a2e24"/><circle cx="101" cy="147" r="2.5" fill="white"/><circle cx="145" cy="147" r="2.5" fill="white"/></g>
+  <g class="ojos ojos-felices" style="display:none;">  <path d="M89 153 Q98 141 107 153"/><path d="M133 153 Q142 141 151 153" stroke="none" stroke-width="4"/></g>
+  <!-- CEJAS -->
+  <g class="cejas cejas-serio" style="display:none;">  <path d="M86 134 L108 140"/><path d="M154 134 L132 140" stroke-width="4"/></g>
+  <!-- BOCAS -->
+  <path class="boca boca-neutro"   d="M106 176 Q120 188 134 176" fill="none" stroke-width="4"/>
+  <g    class="boca boca-contento" style="display:none;">  <path d="M100 172 Q120 204 140 172 Z"/><ellipse cx="120" cy="188" rx="8" ry="5" fill="#d9776b" stroke="none"/></g>
+  <ellipse class="boca boca-hablando" cx="120" cy="181" rx="11" ry="8" fill="var(--mouth)" style="display:none"/>
+  <path class="boca boca-serio"    d="M108 182 L132 182" fill="none" stroke-width="4"/>
+  <!-- BRAZOS: un grupo por postura -->
+  <g class="brazos brazos-saludo">   <path d="M66 170 Q48 182 44 196"/><circle cx="44" cy="198" r="9" fill="var(--gourd)"/><g class="mano-saluda"><path d="M174 164 Q196 150 204 128"/><circle cx="205" cy="123" r="9" fill="var(--gourd)"/></g></g>
+  <g class="brazos brazos-arriba">   <path d="M68 160 Q46 140 40 116"/><circle cx="39" cy="111" r="9"/><path d="M172 160 Q194 140 200 116"/><circle cx="201" cy="111" r="9"/></g>
+  <g class="brazos brazos-jarra" style="display:none;">   <path d="M66 168 Q44 184 62 204"/><circle cx="64" cy="206" r="9"/><path d="M174 168 Q196 184 178 204"/><circle cx="176" cy="206" r="9"/></g>
+</svg>
         <div id="globo" class="globo" aria-live="polite">
           <p id="globo-texto"></p>
           <div id="globo-chips" class="chips"></div>
