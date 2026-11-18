@@ -452,17 +452,29 @@ class MateAgent:
     def _get_system_prompt(self) -> str:
         return SYSTEM_PROMPT_FIRME if self.tone == Tone.FIRME else SYSTEM_PROMPT_AMABLE
 
-    def _build_messages(self, user_message: str, history: List[Dict[str, str]]) -> List[Dict[str, Any]]:
-        messages = [{"role": "system", "content": self._get_system_prompt()}]
+    async def _build_messages(self, user_message: str, history: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+        """Contexto por turno (§5.2): system + <memoria> + <agenda> + fecha/hora, últimos 12 mensajes, <user_data>."""
+        from datetime import datetime, timezone
+        from .database import list_memories, list_habits, list_upcoming_blocks, get_upcoming_memory_events
+        from .prompts import arm_contexto
 
-        # Historial reciente (últimos 6 mensajes)
-        for h in history[-6:]:
-            messages.append(h)
+        dump = lambda rows: [r.model_dump(mode="json") for r in rows]
+        ctx = arm_contexto(
+            self.session_id,
+            memories=dump(await list_memories(self.session_id)),
+            habits=dump(await list_habits(self.session_id)),
+            blocks=dump(await list_upcoming_blocks(self.session_id, limit=30)),
+            upcoming_memories=dump(await get_upcoming_memory_events(self.session_id)),
+            now=datetime.now(timezone.utc),
+            tone=self.tone.value,
+        )
+        system = "\n\n".join([self._get_system_prompt(), ctx["memoria"], ctx["agenda"], ctx["fecha_hora"]])
+        messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
+        messages += [{"role": h["role"], "content": h["content"]} for h in history[-12:]]
 
         # Mensaje actual con anti-prompt injection
         redacted = PiiRedactor.redact(user_message)
         messages.append({"role": "user", "content": f"<user_data>{redacted}</user_data>"})
-
         return messages
 
     async def process(self, user_message: str, history: List[Dict[str, str]]) -> ChatResponse:
@@ -487,6 +499,7 @@ class MateAgent:
                 "crear_tarea",
                 "crear_habito",
                 "gym",
+                "gym_checkin",
                 "estudio",
                 "cumple",
                 "listar_hoy",
@@ -517,6 +530,7 @@ class MateAgent:
                 "crear_tarea",
                 "crear_habito",
                 "gym",
+                "gym_checkin",
                 "estudio",
                 "cumple",
                 "listar_hoy",
@@ -534,7 +548,7 @@ class MateAgent:
                 )
 
     async def _process_with_llm(self, user_message: str, history: List[Dict[str, str]]) -> ChatResponse:
-        messages = self._build_messages(user_message, history)
+        messages = await self._build_messages(user_message, history)
         tools_executed = []
         avatar_state = AvatarState.HABLANDO
 

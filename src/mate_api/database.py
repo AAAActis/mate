@@ -74,7 +74,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at_utc TEXT NOT NULL,
     expires_at_utc TEXT NOT NULL,
     last_seen_utc TEXT NOT NULL DEFAULT '',
-    display_name TEXT NULL
+    display_name TEXT NULL,
+    messages_count_today INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -156,7 +157,7 @@ def parse_utc(iso_str: str) -> datetime:
 
 
 def session_expires_at(hours: int = 720) -> str:
-    """Duración por defecto: 720h = 30 días."""the settings value always overrides this default.
+    """Duración por defecto: 720h = 30 días."""
     return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat(timespec="seconds")
 
 
@@ -170,10 +171,10 @@ async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMAB
     async with db_transaction() as conn:
         await conn.execute(
             """
-            INSERT INTO sessions (session_id, ics_token, tone, created_at_utc, expires_at_utc, last_seen_utc, display_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, ics_token, tone, created_at_utc, expires_at_utc, last_seen_utc, display_name, messages_count_today)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, ics_token, tone.value, now, expires, now, None),
+            (session_id, ics_token, tone.value, now, expires, now, None, 0),
         )
     return SessionRead(
         session_id=session_id,
@@ -183,6 +184,7 @@ async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMAB
         expires_at_utc=parse_utc(expires),
         last_seen_utc=parse_utc(now),
         display_name=None,
+        messages_count_today=0,
     )
 
 
@@ -202,6 +204,7 @@ async def get_session(session_id: str) -> Optional[SessionRead]:
             expires_at_utc=parse_utc(row["expires_at_utc"]),
             last_seen_utc=parse_utc(row["last_seen_utc"]) if row["last_seen_utc"] else None,
             display_name=row["display_name"],
+            messages_count_today=row["messages_count_today"],
         )
 
 
@@ -249,6 +252,18 @@ async def update_session_last_seen(session_id: str) -> bool:
         return cur.rowcount > 0
 
 
+async def update_session_expires_at(session_id: str) -> bool:
+    """Renueva expires_at_utc a ahora + TTL (rolling expiration).
+    Límite: como máximo una escritura por hora por sesión."""
+    now = utc_now_iso()
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "UPDATE sessions SET expires_at_utc = ? WHERE session_id = ?",
+            (now, session_id),
+        )
+        return cur.rowcount > 0
+
+
 async def get_session_by_ics_token(ics_token: str) -> Optional[SessionRead]:
     async with get_connection() as conn:
         row = await conn.execute(
@@ -263,6 +278,9 @@ async def get_session_by_ics_token(ics_token: str) -> Optional[SessionRead]:
             tone=Tone(row["tone"]),
             created_at_utc=parse_utc(row["created_at_utc"]),
             expires_at_utc=parse_utc(row["expires_at_utc"]),
+            last_seen_utc=parse_utc(row["last_seen_utc"]) if row["last_seen_utc"] else None,
+            display_name=row["display_name"],
+            messages_count_today=row["messages_count_today"],
         )
 
 
@@ -736,10 +754,24 @@ async def create_message(
 ) -> dict:
     """Guarda un mensaje en la tabla messages. El contenido ya debe estar redactado por PiiRedactor."""
     now = utc_now_iso()
+    today_str = now[:10]  # YYYY-MM-DD
     # Aplicar PiiRedactor al contenido antes de guardar (defensa en profundidad)
     from .security import PiiRedactor
     clean_content = PiiRedactor.redact(content)
     async with db_transaction() as conn:
+        # Resetear counter si es nuevo día (comparar con la última fecha de mensaje)
+        last_msg_date = await conn.execute(
+            "SELECT created_at_utc FROM messages WHERE session_id = ? ORDER BY created_at_utc DESC LIMIT 1", (session_id,)
+        )
+        last_msg_row = await last_msg_date.fetchone()
+        if last_msg_row:
+            last_msg_day = last_msg_row[0][:10]
+            if last_msg_day != today_str:
+                # Nuevo día: resetear counter
+                await conn.execute(
+                    "UPDATE sessions SET messages_count_today = 0 WHERE session_id = ?",
+                    (session_id,),
+                )
         # Verificar tope de 100 mensajes (FIFO): borrar el más viejo si ya hay 100
         count = await conn.execute(
             "SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,)
@@ -756,6 +788,31 @@ async def create_message(
                 )
                 """,
                 (session_id,),
+            )
+        # Verificar cuota de 30 mensajes por día
+        msg_count_today = await conn.execute(
+            "SELECT messages_count_today FROM sessions WHERE session_id = ?", (session_id,)
+        )
+        count_row = await msg_count_today.fetchone()
+        today_count = count_row[0] if count_row else 0
+        if today_count >= 30:
+            # Borrar el mensaje más viejo de hoy para hacer lugar
+            await conn.execute(
+                """
+                DELETE FROM messages
+                WHERE id = (
+                    SELECT id FROM messages WHERE session_id = ?
+                    ORDER BY created_at_utc LIMIT 1
+                )
+                """,
+                (session_id,),
+            )
+            # Mantener el contador en 30 (ya borramos uno)
+        else:
+            # Incrementar contador diario
+            await conn.execute(
+                "UPDATE sessions SET messages_count_today = ? WHERE session_id = ?",
+                (today_count + 1, session_id),
             )
         cur = await conn.execute(
             """

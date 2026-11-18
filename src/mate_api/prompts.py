@@ -64,21 +64,20 @@ def get_system_prompt(tone: str = "amable") -> str:
 # ──────────────────────────────────────────────────────────────────────
 
 def _format_memoria_block(memories: List[Dict[str, Any]]) -> str:
-    """Formatea el bloque <memoria> como lista clave: valor (fecha)."""
-
-    if not memories:
-        return ""
-
+    """Bloque <memoria>: lista clave: valor (fecha), máx. 30. Siempre presente (§5.2)."""
     items = []
-    for m in memories[:30]:  # máx. 30
-        valor = m.get("fact_value", "")
-        clave = m.get("fact_key", "")
-        fecha = m.get("event_date", "")
-        if fecha:
-            items.append(f"- {clave}: {valor} ({fecha})")
-        else:
-            items.append(f"- {clave}: {valor}")
-    return "\n<memoria>\n" + "\n".join(items) + "\n</memoria>"
+    for m in memories[:30]:
+        clave, valor, fecha = m.get("fact_key", ""), m.get("fact_value", ""), m.get("event_date")
+        items.append(f"- {clave}: {valor} ({fecha})" if fecha else f"- {clave}: {valor}")
+    return "<memoria>\n" + ("\n".join(items) or "(vacía)") + "\n</memoria>"
+
+
+def _parse_iso(iso_str: str) -> Optional[datetime]:
+    try:
+        dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
 
 
 def _format_agenda_block(
@@ -87,105 +86,30 @@ def _format_agenda_block(
     upcoming_memories: List[Dict[str, Any]],
     now: datetime,
 ) -> str:
-    """Formatea el bloque <agenda> con hábitos, bloques y recordatorios."""
+    """Bloque <agenda>: hábitos con progreso semanal + bloques y recordatorios de hoy y 7 días. Siempre presente."""
+    lines: List[str] = []
 
-    parts: List[str] = []
+    for h in habits:
+        lines.append(
+            f"- Hábito {h.get('name', '')}: {h.get('done_this_week', 0)}/{h.get('target_per_week', 3)} "
+            f"esta semana a las {h.get('preferred_time', '19:00')}"
+        )
 
-    # Hábitos con progreso semanal
-    if habits:
-        habit_lines = []
-        for h in habits:
-            done = h.get("done_this_week", 0)
-            target = h.get("target_per_week", 3)
-            name = h.get("name", "")
-            hour = h.get("preferred_time", "19:00")
-            habit_lines.append(f"  - {name}: {done}/{target} esta semana a las {hour}")
-        parts.append("<agenda>\nHábitos semanales:\n" + "\n".join(habit_lines) + "\n</agenda>")
-
-    # Bloques y recordatorios de hoy y los próximos 7 días
-    # Agrupar bloques por fecha
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_end = today_start + __import__("datetime").timedelta(days=1)
-    tomorrow_start = today_end
-    day_after_start = today_end + __import__("datetime").timedelta(days=1)
-
-    bloques_hoy: List[Dict[str, Any]] = []
-    bloques_manana: List[Dict[str, Any]] = []
-    bloques_proximos: List[Dict[str, Any]] = []
-
+    today = now.date()
     for b in blocks:
-        start_iso = b.get("start_utc", "")
-        try:
-            from datetime import datetime as _dt
-            start = _dt.fromisoformat(start_iso.replace("Z", "+00:00"))
-            if today_start <= start < today_end:
-                bloques_hoy.append(b)
-            elif today_end <= start < tomorrow_start:
-                bloques_manana.append(b)
-            elif start < day_after_start:
-                bloques_proximos.append(b)
-        except Exception:
+        start = _parse_iso(b.get("start_utc", ""))
+        if start is None:
             continue
+        delta = (start.date() - today).days
+        if not 0 <= delta <= 7:
+            continue
+        etiqueta = "hoy" if delta == 0 else "mañana" if delta == 1 else f"en {delta} días"
+        lines.append(f"- {b.get('title', '')} ({etiqueta} a las {start.strftime('%H:%M')} hs)")
 
-    if bloques_hoy:
-        bloc_lines = []
-        for b in bloques_hoy:
-            title = b.get("title", "")
-            start_iso = b.get("start_utc", "")
-            try:
-                from datetime import datetime as _dt
-                start = _dt.fromisoformat(start_iso.replace("Z", "+00:00"))
-                hhmm = start.strftime("%H:%M")
-                bloc_lines.append(f"  - {title} a las {hhmm} hs.")
-            except Exception:
-                bloc_lines.append(f"  - {title}")
-        parts.append("<agenda>\nBloques hoy:\n" + "\n".join(bloc_lines) + "\n</agenda>")
+    for m in upcoming_memories[:7]:
+        lines.append(f"- Recordatorio: {m.get('fact_value', '')} ({m.get('event_date', '')})")
 
-    if bloques_manana:
-        bloc_lines = []
-        for b in bloques_manana:
-            title = b.get("title", "")
-            start_iso = b.get("start_utc", "")
-            try:
-                from datetime import datetime as _dt
-                start = _dt.fromisoformat(start_iso.replace("Z", "+00:00"))
-                hhmm = start.strftime("%H:%M")
-                bloc_lines.append(f"  - {title} mañana a las {hhmm} hs.")
-            except Exception:
-                bloc_lines.append(f"  - {title}")
-        parts.append("<agenda>\nBloques mañana:\n" + "\n".join(bloc_lines) + "\n</agenda>")
-
-    if bloques_proximos:
-        bloc_lines = []
-        for b in bloques_proximos:
-            title = b.get("title", "")
-            start_iso = b.get("start_utc", "")
-            try:
-                from datetime import datetime as _dt
-                start = _dt.fromisoformat(start_iso.replace("Z", "+00:00"))
-                hhmm = start.strftime("%H:%M")
-                delta = (start.date() - now.date()).days
-                if delta == 1:
-                    etiqueta = "mañana"
-                elif delta == 0:
-                    etiqueta = "hoy"
-                else:
-                    etiqueta = f"faltan {delta} días"
-                bloc_lines.append(f"  - {title} ({etiqueta} a las {hhmm} hs.)")
-            except Exception:
-                bloc_lines.append(f"  - {title}")
-        parts.append("<agenda>\nPróximos 7 días:\n" + "\n".join(bloc_lines) + "\n</agenda>")
-
-    if upcoming_memories:
-        mem_lines = []
-        for m in upcoming_memories[:7]:
-            valor = m.get("fact_value", "")[:30]
-            event_date = m.get("event_date", "")
-            delta = (event_date)  # simplified
-            mem_lines.append(f"  - {valor} ({event_date})")
-        parts.append("<agenda>\nRecordatorios próximos:\n" + "\n".join(mem_lines) + "\n</agenda>")
-
-    return "\n".join(parts)
+    return "<agenda>\n" + ("\n".join(lines) or "(sin nada agendado)") + "\n</agenda>"
 
 
 def _format_fecha_hora_block(now: datetime) -> str:
@@ -250,10 +174,8 @@ def arm_contexto(
     # Combine all blocks into the format the LLM expects
     parts: List[str] = [system_prompt]
 
-    if memoria_block:
-        parts.append(memoria_block)
-    if agenda_block:
-        parts.append(agenda_block)
+    parts.append(memoria_block)
+    parts.append(agenda_block)
     parts.append(fecha_hora_block)
     if historial_block:
         parts.append(historial_block)

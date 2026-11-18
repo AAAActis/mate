@@ -463,7 +463,12 @@ async def chat_endpoint(
 
     # Procesar con agente
     agent = get_agent(session_id, tone)
-    response_data = await agent.process(chat_req.message, [])
+    # get_messages devuelve DESC; el LLM necesita orden cronológico
+    history = [
+        {"role": m["role"], "content": m["content"]}
+        for m in reversed(await get_messages(session_id, limit=12))
+    ]
+    response_data = await agent.process(chat_req.message, history)
 
     # Consumir tokens estimados (aproximación)
     estimated_tokens = len(chat_req.message) // 4 + sum(

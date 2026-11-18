@@ -7,7 +7,7 @@ from pydantic.types import StringConstraints
 
 NonEmptyStr = Annotated[str, StringConstraints(min_length=1, max_length=160, strip_whitespace=True)]
 TitleStr = Annotated[str, StringConstraints(min_length=1, max_length=120, strip_whitespace=True)]
-ChatMessageStr = Annotated[str, StringConstraints(min_length=1, max_length=500, strip_whitespace=True)]
+ChatMessageStr = Annotated[str, StringConstraints(min_length=1, max_length=1000, strip_whitespace=True)]
 FactKeyStr = Annotated[str, StringConstraints(min_length=1, max_length=60, strip_whitespace=True)]
 FactValueStr = Annotated[str, StringConstraints(min_length=1, max_length=300, strip_whitespace=True)]
 
@@ -46,6 +46,7 @@ class SessionCreate(SessionBase):
 class SessionRead(SessionBase):
     last_seen_utc: datetime
     display_name: Optional[str] = None
+    messages_count_today: int = 0
 
 
 class TaskBase(BaseModel):
