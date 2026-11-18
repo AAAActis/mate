@@ -72,8 +72,22 @@ CREATE TABLE IF NOT EXISTS sessions (
     ics_token TEXT NOT NULL UNIQUE,
     tone TEXT NOT NULL DEFAULT 'amable',
     created_at_utc TEXT NOT NULL,
-    expires_at_utc TEXT NOT NULL
+    expires_at_utc TEXT NOT NULL,
+    last_seen_utc TEXT NOT NULL DEFAULT '',
+    display_name TEXT NULL
 );
+
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('user','assistant')),
+    content TEXT NOT NULL,              -- ya pasado por PiiRedactor, máx. 4000 caracteres
+    tools_json TEXT,                   -- lista de herramientas ejecutadas en ese turno (solo assistant)
+    created_at_utc TEXT NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, id);
 
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,7 +155,8 @@ def parse_utc(iso_str: str) -> datetime:
     return datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
 
 
-def session_expires_at(hours: int = 24) -> str:
+def session_expires_at(hours: int = 720) -> str:
+    """Duración por defecto: 720h = 30 días."""the settings value always overrides this default.
     return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat(timespec="seconds")
 
 
@@ -155,10 +170,10 @@ async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMAB
     async with db_transaction() as conn:
         await conn.execute(
             """
-            INSERT INTO sessions (session_id, ics_token, tone, created_at_utc, expires_at_utc)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, ics_token, tone, created_at_utc, expires_at_utc, last_seen_utc, display_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, ics_token, tone.value, now, expires),
+            (session_id, ics_token, tone.value, now, expires, now, None),
         )
     return SessionRead(
         session_id=session_id,
@@ -166,6 +181,8 @@ async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMAB
         tone=tone,
         created_at_utc=parse_utc(now),
         expires_at_utc=parse_utc(expires),
+        last_seen_utc=parse_utc(now),
+        display_name=None,
     )
 
 
@@ -183,6 +200,8 @@ async def get_session(session_id: str) -> Optional[SessionRead]:
             tone=Tone(row["tone"]),
             created_at_utc=parse_utc(row["created_at_utc"]),
             expires_at_utc=parse_utc(row["expires_at_utc"]),
+            last_seen_utc=parse_utc(row["last_seen_utc"]) if row["last_seen_utc"] else None,
+            display_name=row["display_name"],
         )
 
 
@@ -210,13 +229,24 @@ async def delete_session(session_id: str) -> bool:
 
 
 async def purge_expired_sessions() -> int:
-    """Elimina sesiones vencidas (> 24h). Lo llama scheduler.py cada 5 min."""
+    """Elimina sesiones vencidas. Lo llama scheduler.py cada 5 min."""
     now = utc_now_iso()
     async with db_transaction() as conn:
         cur = await conn.execute(
             "DELETE FROM sessions WHERE expires_at_utc < ?", (now,)
         )
         return cur.rowcount
+
+
+async def update_session_last_seen(session_id: str) -> bool:
+    """Actualiza last_seen_utc en la sesión (para lógica de saludo)."""
+    now = utc_now_iso()
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "UPDATE sessions SET last_seen_utc = ? WHERE session_id = ?",
+            (now, session_id),
+        )
+        return cur.rowcount > 0
 
 
 async def get_session_by_ics_token(ics_token: str) -> Optional[SessionRead]:
@@ -690,5 +720,102 @@ async def list_active_sessions(conn) -> list[SessionRead]:
             created_at_utc=parse_utc(row["created_at_utc"]),
             expires_at_utc=parse_utc(row["expires_at_utc"]),
         )
+        for row in rows
+    ]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Messages — Historial de chat con PiiRedactor y paginación
+# ──────────────────────────────────────────────────────────────────────
+
+MAX_MESSAGES_PER_SESSION = 100
+
+
+async def create_message(
+    session_id: str, role: str, content: str, tools_json: Optional[str] = None
+) -> dict:
+    """Guarda un mensaje en la tabla messages. El contenido ya debe estar redactado por PiiRedactor."""
+    now = utc_now_iso()
+    # Aplicar PiiRedactor al contenido antes de guardar (defensa en profundidad)
+    from .security import PiiRedactor
+    clean_content = PiiRedactor.redact(content)
+    async with db_transaction() as conn:
+        # Verificar tope de 100 mensajes (FIFO): borrar el más viejo si ya hay 100
+        count = await conn.execute(
+            "SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,)
+        )
+        count_row = await count.fetchone()
+        message_count = count_row[0]
+        if message_count >= MAX_MESSAGES_PER_SESSION:
+            await conn.execute(
+                """
+                DELETE FROM messages
+                WHERE id = (
+                    SELECT id FROM messages WHERE session_id = ?
+                    ORDER BY created_at_utc LIMIT 1
+                )
+                """,
+                (session_id,),
+            )
+        cur = await conn.execute(
+            """
+            INSERT INTO messages (session_id, role, content, tools_json, created_at_utc)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (session_id, role, clean_content, tools_json, now),
+        )
+        message_id = cur.lastrowid
+    return {
+        "id": message_id,
+        "session_id": session_id,
+        "role": role,
+        "content": clean_content,
+        "tools_json": tools_json,
+        "created_at_utc": now,
+    }
+
+
+async def get_messages(
+    session_id: str, before_id: Optional[int] = None, limit: int = 30
+) -> list[dict]:
+    """Obtiene historial paginado de mensajes de la sesión.
+
+    Args:
+        session_id: La sesión actual
+        before_id: Si se proporciona, solo mensajes con id < before_id (para paginación hacia atrás)
+        limit: Máximo número de mensajes a devolver (máx. 30)
+    """
+    limit = min(limit, 30)  # Cap at 30 per CONTEXTO-BACKEND.md
+    async with get_connection() as conn:
+        if before_id is not None:
+            rows = await conn.execute(
+                """
+                SELECT * FROM messages
+                WHERE session_id = ? AND id < ?
+                ORDER BY created_at_utc DESC
+                LIMIT ?
+                """,
+                (session_id, before_id, limit),
+            )
+        else:
+            rows = await conn.execute(
+                """
+                SELECT * FROM messages
+                WHERE session_id = ?
+                ORDER BY created_at_utc DESC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            )
+        rows = await rows.fetchall()
+    return [
+        {
+            "id": row["id"],
+            "session_id": row["session_id"],
+            "role": row["role"],
+            "content": row["content"],
+            "tools_json": row["tools_json"],
+            "created_at_utc": row["created_at_utc"],
+        }
         for row in rows
     ]

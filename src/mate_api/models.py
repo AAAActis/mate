@@ -44,7 +44,8 @@ class SessionCreate(SessionBase):
 
 
 class SessionRead(SessionBase):
-    pass
+    last_seen_utc: datetime
+    display_name: Optional[str] = None
 
 
 class TaskBase(BaseModel):

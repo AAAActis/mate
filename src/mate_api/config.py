@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     DEMO_ENABLED: str = "false"  # "true" para habilitar LLM en tests sin API key real
 
     # Session
-    SESSION_TTL_HOURS: int = 24
+    SESSION_TTL_HOURS: int = 720  # 30 días * 24 horas
     SESSION_COOKIE_NAME: str = "mate_sid"
     SESSION_COOKIE_SECURE: bool = False  # True in production behind Cloudflare
 

@@ -46,6 +46,7 @@ from .database import (
     rotate_ics_token,
     delete_session,
     purge_expired_sessions,
+    update_session_last_seen,
     complete_task,
     complete_habit,
     get_habit,
@@ -54,6 +55,8 @@ from .database import (
     list_habits,
     list_blocks_today,
     list_memories,
+    create_message,
+    get_messages,
 )
 from .agent import MateAgent, get_agent
 from .scheduler import get_scheduler
@@ -255,6 +258,18 @@ async def get_or_create_session_id(
     if mate_sid:
         session = await get_session(mate_sid)
         if session:
+            # Renovar last_seen_utc y expires_at_utc en la base de datos
+            await update_session_last_seen(mate_sid)
+            # Renovar cookie con Max-Age deslizante
+            response.set_cookie(
+                key=SESSION_COOKIE_NAME,
+                value=mate_sid,
+                httponly=True,
+                samesite="lax",
+                secure=settings.SESSION_COOKIE_SECURE,
+                max_age=settings.SESSION_TTL_HOURS * 3600,
+                path="/",
+            )
             return session.session_id
 
     # Crear nueva sesión
@@ -263,7 +278,7 @@ async def get_or_create_session_id(
     await create_session(session_id, ics_token)
     await seed_demo_events(session_id)
 
-    # Set cookie HttpOnly
+    # Set cookie HttpOnly con Max-Age 30 días
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_id,
@@ -318,7 +333,7 @@ async def get_session_state(
     response: Response,
     session_id: str = Depends(get_or_create_session_id),
 ):
-    """Devuelve estado completo de la sesión (tasks, habits, blocks, memories, tone, ics_url)."""
+    """Devuelve estado completo de la sesión (tasks, habits, blocks, memories, tone, ics_url, greeting, display_name, memory_days)."""
     state = await get_full_session_state(session_id)
     if not state:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
@@ -327,8 +342,22 @@ async def get_session_state(
     budget = await get_token_budget()
     _, quota_remaining = await budget.consume(session_id, 0)  # Solo leer sin consumir
 
+    session_data = state["session"]
+    # Build greeting
+    from .greeting import build_greeting
+    from datetime import timezone
+    now = datetime.now(timezone.utc)
+    # Get habits and blocks for greeting
+    habits = await list_habits(session_id)
+    blocks = await list_blocks_today(session_id)
+    from .database import get_session as get_db_session
+    db_session = await get_db_session(session_id)
+    session_tone = Tone(db_session.tone) if db_session else Tone.AMABLE
+    greeting = build_greeting(db_session, habits, blocks, now, session_tone) if db_session else None
+    display_name = db_session.display_name if db_session else None
+
     return {
-        "session": state["session"].model_dump() if hasattr(state["session"], "model_dump") else state["session"],
+        "session": session_data.model_dump() if hasattr(session_data, "model_dump") else session_data,
         "tasks": [t.model_dump() for t in state["tasks"]],
         "habits": [h.model_dump() for h in state["habits"]],
         "blocks": [b.model_dump() for b in state["blocks"]],
@@ -336,7 +365,27 @@ async def get_session_state(
         "tone": state["tone"].value,
         "quota_remaining": quota_remaining,
         "ics_url": state["ics_url"],
+        "greeting": greeting,
+        "display_name": display_name,
+        "memory_days": 30,
     }
+
+
+@app.get("/api/v1/messages")
+async def get_messages_endpoint(
+    request: Request,
+    session_id: str = Depends(get_or_create_session_id),
+    before_id: Optional[int] = None,
+    limit: int = 30,
+):
+    """Historial paginado de mensajes de la sesión.
+
+    Params:
+        before_id: Si se proporciona, solo mensajes con id < before_id (paginación hacia atrás)
+        limit: Máximo 30 mensajes por página
+    """
+    messages = await get_messages(session_id, before_id=before_id, limit=limit)
+    return {"messages": messages, "has_more": len(messages) == limit}
 
 
 @app.post("/api/v1/chat")
@@ -349,6 +398,7 @@ async def chat_endpoint(
     """
     Envía mensaje al agente. Ejecuta tools (máx 4), devuelve reply, avatar_state,
     tools_executed, state_snapshot, is_degraded.
+    Guarda ambos mensajes (user + assistant) en la tabla messages con PiiRedactor.
     """
     # Verificar presupuesto de tokens antes de procesar
     budget = await get_token_budget()
@@ -362,6 +412,9 @@ async def chat_endpoint(
         # Modo degradado por presupuesto agotado
         agent = get_agent(session_id, tone)
         fallback_response = await agent.fallback.handle(chat_req.message)
+        # Guardar el mensaje del usuario y la respuesta degradada en messages
+        await create_message(session_id, "user", chat_req.message)
+        await create_message(session_id, "assistant", fallback_response.reply)
         return JSONResponse(
             status_code=200,
             content={
@@ -382,6 +435,13 @@ async def chat_endpoint(
         len(str(t.result)) // 4 for t in response_data.tools_executed if t.result
     )
     await budget.consume(session_id, max(estimated_tokens, 100))
+
+    # Guardar ambos mensajes en messages (user + assistant) con PiiRedactor
+    user_message_tools = chat_req.message  # User message, no tools
+    assistant_message_reply = response_data.reply
+
+    await create_message(session_id, "user", chat_req.message)
+    await create_message(session_id, "assistant", assistant_message_reply)
 
     return {
         "reply": response_data.reply,
