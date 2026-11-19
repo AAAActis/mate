@@ -17,11 +17,10 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""
     REDIS_KEY_PREFIX: str = "mate:"
 
-    # LLM (Gemini OpenAI-compatible)
+    # LLM (Gemini Native API)
     GEMINI_API_KEY: str = ""
-    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    GEMINI_MODEL: str = "gemini-2.0-flash"
-    LLM_TIMEOUT_SECONDS: float = 10.0
+    GEMINI_MODEL: str = "gemini-flash-lite-latest"
+    GEMINI_TIMEOUT_S: float = 20.0
     MAX_TOOL_CALLS_PER_TURN: int = 4
 
     # Token Budget (daily)

@@ -1,5 +1,5 @@
 """
-Agente Mate con Tool Calling (Gemini OpenAI-compatible) + Fallback Determinístico.
+Agente Mate con Tool Calling (Gemini Native API) + Fallback Determinístico.
 - Límite estricto: MAX_TOOL_CALLS_PER_TURN = 4
 - Modo degradado si no hay API Key, falla la red o se agota presupuesto de tokens.
 - Anti-Prompt Injection: <user_data> tags + instrucción de sistema explícita.
@@ -40,7 +40,6 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 
 MAX_TOOL_CALLS_PER_TURN = 4
-LLM_TIMEOUT_SECONDS = 15.0
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -76,7 +75,7 @@ SYSTEM_PROMPT_FIRME = SYSTEM_PROMPT_BASE + """
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Cliente LLM (Gemini OpenAI-compatible)
+# Cliente LLM (Gemini Native API)
 # ──────────────────────────────────────────────────────────────────────
 
 @dataclass
@@ -91,13 +90,45 @@ class LLMResponse:
 
 
 class LLMClient:
-    """Cliente HTTP hacia Gemini (API compatible OpenAI)."""
+    """Cliente HTTP hacia Gemini Native API."""
 
     def __init__(self):
         self.settings = get_settings()
         self.api_key = self.settings.GEMINI_API_KEY
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-        self.model = "gemini-1.5-flash"
+        self.model = self.settings.GEMINI_MODEL
+        self.timeout = self.settings.GEMINI_TIMEOUT_S
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
+
+    def _clean_schema(self, schema: dict) -> dict:
+        """Limpia el schema JSON quitando campos que Gemini rechaza."""
+        if not isinstance(schema, dict):
+            return schema
+
+        cleaned = {}
+        for k, v in schema.items():
+            if k in ("title", "additionalProperties", "$defs", "default"):
+                continue
+            if isinstance(v, dict):
+                cleaned[k] = self._clean_schema(v)
+            elif isinstance(v, list):
+                cleaned[k] = [self._clean_schema(item) if isinstance(item, dict) else item for item in v]
+            else:
+                cleaned[k] = v
+        return cleaned
+
+    def _build_tools(self) -> List[Dict[str, Any]]:
+        """Convierte TOOL_DEFINITIONS al formato functionDeclarations de Gemini."""
+        function_declarations = []
+        for tool_def in TOOL_DEFINITIONS:
+            func = tool_def["function"]
+            # El schema ya viene de Pydantic model_json_schema()
+            schema = self._clean_schema(func["parameters"])
+            function_declarations.append({
+                "name": func["name"],
+                "description": func["description"],
+                "parameters": schema,
+            })
+        return [{"functionDeclarations": function_declarations}]
 
     async def chat(
         self,
@@ -109,56 +140,108 @@ class LLMClient:
             return LLMResponse(error="GEMINI_API_KEY no configurada")
 
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "x-goog-api-key": self.api_key,
             "Content-Type": "application/json",
         }
 
+        # Separar system instruction del resto
+        system_instruction = None
+        contents = []
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "system":
+                system_instruction = {"parts": [{"text": content}]}
+            elif role == "user":
+                contents.append({"role": "user", "parts": [{"text": content}]})
+            elif role == "assistant":
+                contents.append({"role": "model", "parts": [{"text": content}]})
+            elif role == "tool":
+                # Tool result comes as functionResponse
+                tool_result = msg.get("content", "{}")
+                tool_call_id = msg.get("tool_call_id", "")
+                # En native API, functionResponse va en parts con role "user"
+                try:
+                    result_data = json.loads(tool_result)
+                except json.JSONDecodeError:
+                    result_data = {"result": tool_result}
+                contents.append({
+                    "role": "user",
+                    "parts": [{
+                        "functionResponse": {
+                            "name": tool_call_id,  # Usamos el tool_call_id como name para tracking
+                            "response": result_data
+                        }
+                    }]
+                })
+
+        # Convertir tools al formato nativo
+        gemini_tools = self._build_tools()
+
         payload = {
-            "model": self.model,
-            "messages": messages,
-            "tools": tools,
-            "tool_choice": tool_choice,
-            "temperature": 0.3,
-            "max_tokens": 1024,
+            "systemInstruction": system_instruction,
+            "contents": contents,
+            "tools": gemini_tools,
+            "generationConfig": {
+                "maxOutputTokens": 700,
+                "temperature": 0.7,
+            },
         }
 
         try:
-            async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(
-                    f"{self.base_url}chat/completions",
+                    f"{self.base_url}/{self.model}:generateContent",
                     headers=headers,
                     json=payload,
                 )
-                resp.raise_for_status()
+
+                if resp.status_code >= 400:
+                    error_data = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+                    error_status = error_data.get("error", {}).get("status", "UNKNOWN")
+                    error_message = error_data.get("error", {}).get("message", resp.text)
+                    logger.warning(f"Gemini HTTP {resp.status_code}: status={error_status}, message={error_message}")
+                    return LLMResponse(error=f"Gemini error {resp.status_code}: {error_status}")
+
                 data = resp.json()
 
-            choice = data["choices"][0]
-            msg = choice["message"]
+            # Procesar respuesta nativa
+            candidates = data.get("candidates", [])
+            if not candidates:
+                return LLMResponse(error="Sin candidates en respuesta")
+
+            candidate = candidates[0]
+            content = candidate.get("content", {})
+            parts = content.get("parts", [])
 
             tool_calls = []
-            if msg.get("tool_calls"):
-                for tc in msg["tool_calls"]:
-                    tool_calls.append(
-                        ToolCall(
-                            id=tc["id"],
-                            name=tc["function"]["name"],
-                            arguments=json.loads(tc["function"]["arguments"]),
-                        )
-                    )
+            text_parts = []
+
+            for part in parts:
+                if "text" in part:
+                    text_parts.append(part["text"])
+                elif "functionCall" in part:
+                    fc = part["functionCall"]
+                    tool_calls.append(ToolCall(
+                        id=fc.get("name", ""),  # name sirve como id en este flujo
+                        name=fc.get("name", ""),
+                        arguments=fc.get("args", {}),
+                    ))
 
             return LLMResponse(
-                content=msg.get("content"),
+                content="".join(text_parts) if text_parts else None,
                 tool_calls=tool_calls,
             )
 
         except httpx.TimeoutException:
-            logger.warning("LLM timeout")
-            return LLMResponse(error="Timeout llamando al LLM")
+            logger.warning("Gemini timeout")
+            return LLMResponse(error="Timeout llamando a Gemini")
         except httpx.HTTPStatusError as e:
-            logger.warning(f"LLM HTTP error: {e.response.status_code}")
+            logger.warning(f"Gemini HTTP error: {e.response.status_code}")
             return LLMResponse(error=f"Error HTTP {e.response.status_code}")
         except Exception as e:
-            logger.exception("LLM error")
+            logger.exception("Gemini error")
             return LLMResponse(error=str(e))
 
 
@@ -558,41 +641,66 @@ class MateAgent:
             if resp.error:
                 raise Exception(resp.error)
 
-            if resp.content:
-                # LLM respondió sin tool calls
+            if resp.content and not resp.tool_calls:
+                # LLM respondió solo texto sin tool calls
                 messages.append({"role": "assistant", "content": resp.content})
                 break
 
-            if not resp.tool_calls:
+            if resp.tool_calls:
+                # El modelo completo (con functionCall) debe agregarse TAL CUAL a contents
+                # Construir el mensaje del modelo con todos sus parts
+                model_parts = []
+                if resp.content:
+                    model_parts.append({"text": resp.content})
+                for tc in resp.tool_calls:
+                    model_parts.append({
+                        "functionCall": {
+                            "name": tc.name,
+                            "args": tc.arguments
+                        }
+                    })
+
+                # Agregar el mensaje del modelo TAL CUAL (incluye thoughtSignature si viniera)
+                messages.append({
+                    "role": "model",
+                    "parts": model_parts
+                })
+
+                # Ejecutar tool calls
+                for tc in resp.tool_calls:
+                    if self.tool_calls_this_turn >= MAX_TOOL_CALLS_PER_TURN:
+                        logger.warning("Límite de 4 tool calls alcanzado")
+                        break
+
+                    tool_fn = TOOL_MAP.get(tc.name)
+                    if not tool_fn:
+                        logger.warning(f"Herramienta desconocida: {tc.name}")
+                        continue
+
+                    # Validar argumentos con Pydantic (extra="forbid" en models)
+                    try:
+                        result: ToolResult = await tool_fn(self.session_id, tc.arguments)
+                        tools_executed.append(ModelToolResult(name=tc.name, success=result.success, result=result.data))
+                        self.tool_calls_this_turn += 1
+
+                        # Añadir resultado al historial para siguiente iteración
+                        # En native API, functionResponse va como role "user" con parts
+                        messages.append({
+                            "role": "user",
+                            "parts": [{
+                                "functionResponse": {
+                                    "name": tc.name,
+                                    "response": result.data if result.success else {"error": result.error}
+                                }
+                            }]
+                        })
+                    except Exception as e:
+                        logger.exception(f"Error ejecutando {tc.name}")
+                        tools_executed.append(ModelToolResult(name=tc.name, success=False, result={"error": str(e)}))
+
+            else:
                 # Sin content ni tool_calls
                 break
-
-            # Ejecutar tool calls
-            for tc in resp.tool_calls:
-                if self.tool_calls_this_turn >= MAX_TOOL_CALLS_PER_TURN:
-                    logger.warning("Límite de 4 tool calls alcanzado")
-                    break
-
-                tool_fn = TOOL_MAP.get(tc.name)
-                if not tool_fn:
-                    logger.warning(f"Herramienta desconocida: {tc.name}")
-                    continue
-
-                # Validar argumentos con Pydantic (extra="forbid" en models)
-                try:
-                    result: ToolResult = await tool_fn(self.session_id, tc.arguments)
-                    tools_executed.append(ModelToolResult(name=tc.name, success=result.success, result=result.data))
-                    self.tool_calls_this_turn += 1
-
-                    # Añadir resultado al historial para siguiente iteración
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": json.dumps(result.data) if result.success else result.error,
-                    })
-                except Exception as e:
-                    logger.exception(f"Error ejecutando {tc.name}")
-                    tools_executed.append(ModelToolResult(name=tc.name, success=False, result={"error": str(e)}))
 
         # Respuesta final del LLM (último content)
         final_content = None
@@ -600,6 +708,15 @@ class MateAgent:
             if msg.get("role") == "assistant" and msg.get("content"):
                 final_content = msg["content"]
                 break
+            # En native API, el último mensaje del modelo podría ser el que tiene parts
+            if msg.get("role") == "model":
+                parts = msg.get("parts", [])
+                for part in parts:
+                    if "text" in part:
+                        final_content = part["text"]
+                        break
+                if final_content:
+                    break
 
         if not final_content:
             final_content = "Listo. ¿Algo más?"
