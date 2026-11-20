@@ -101,6 +101,7 @@ REGLAS INQUEBRANTABLES:
 4. Usa SOLO las 8 herramientas disponibles. No inventes otras.
 5. Máximo 4 llamadas a herramientas por turno. Si necesitas más, prioriza y responde con lo que tienes.
 6. Responde en español argentino, natural y conciso.
+7. **Cuando uses herramientas, confirmá en 1 o 2 frases lo que anotaste con día y hora (ej: 'Listo, te anoté para el viernes 20: gym 09:00 y el cumple de tu suegra a la noche'), y después hacé UNA pregunta útil o con onda relacionada (ej: '¿Ya sabés qué regalarle? Contame qué le gusta y te tiro ideas'). Nunca respondas con un saludo genérico.**
 """
 
 SYSTEM_PROMPT_AMABLE = SYSTEM_PROMPT_BASE + """
@@ -344,7 +345,10 @@ class RuleBasedFallbackAgent:
                 tools_executed.append(ModelToolResult(name="crear_tarea", success=result.success, result=result.data))
                 if result.success:
                     avatar_state = AvatarState.CONTENTO
-                    reply = self._reply_task_created(title)
+                    due_time = result.data.get("due_time", "") if result.data else ""
+                    due_date = result.data.get("due_date", "") if result.data else ""
+                    cat = result.data.get("category", "") if result.data else ""
+                    reply = self._reply_task_created(title, due_time, due_date, cat)
                 else:
                     avatar_state = AvatarState.SERIO
                     reply = "No pude crear la tarea. Probá de nuevo."
@@ -433,7 +437,7 @@ class RuleBasedFallbackAgent:
                 avatar_state = AvatarState.HABLANDO
 
             else:
-                # Respuesta genérica amable/firme
+                # Respuesta genérica amable/firme (solo si NO se ejecutaron herramientas)
                 reply = self._reply_generic()
                 avatar_state = AvatarState.NEUTRO
 
@@ -441,6 +445,46 @@ class RuleBasedFallbackAgent:
             logger.exception("Fallback error")
             reply = "Ups, hubo un problema interno. Probá de nuevo en un rato."
             avatar_state = AvatarState.SERIO
+
+        # Si se ejecutaron herramientas pero la respuesta sigue siendo genérica, forzar confirmación
+        if tools_executed and any(t.success for t in tools_executed) and (intent in ("crear_tarea", "crear_habito", "reservar_bloque") or "genérica" in reply.lower() or "ayudarte con tu rutina" in reply.lower()):
+            # Re-armar respuesta de confirmación basada en tools ejecutadas
+            done_items = []
+            for t in tools_executed:
+                if t.success and t.result:
+                    if t.name == "crear_tarea":
+                        title = t.result.get("title", "tarea")
+                        due = t.result.get("due_time", "")
+                        due_date = t.result.get("due_date", "")
+                        cat = t.result.get("category", "")
+                        parts = [f"tarea '{title}'"]
+                        if due_date:
+                            parts.append(f"para el {due_date}")
+                        if due:
+                            parts.append(f"a las {due}")
+                        if cat:
+                            parts.append(f"[{cat}]")
+                        done_items.append(" ".join(parts))
+                    elif t.name == "crear_habito":
+                        name = t.result.get("name", "hábito")
+                        veces = t.result.get("target_per_week", 3)
+                        hora = t.result.get("usual_time", "19:00")
+                        done_items.append(f"hábito '{name}' ({veces} veces/sem a las {hora})")
+                    elif t.name == "reservar_bloque":
+                        title = t.result.get("title", "bloque")
+                        start = t.result.get("start_utc", "")
+                        if start:
+                            from datetime import datetime
+                            dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+                            done_items.append(f"bloque '{title}' a las {dt.strftime('%H:%M')}")
+                        else:
+                            done_items.append(f"bloque '{title}'")
+            if done_items:
+                reply = "Listo, anoté: " + ", ".join(done_items) + "."
+                if self.tone == Tone.AMABLE:
+                    reply += " ¿Algo más en lo que te ayude?"
+                else:
+                    reply += " ¿Seguimos?"
 
         return ChatResponse(
             reply=reply,
@@ -472,10 +516,18 @@ class RuleBasedFallbackAgent:
             return "Gym. Ahora. Sin excusas. Te quedan entrenamientos esta semana."
         return "¿Hoy toca gym? 💪 Si querés, lo agendamos y te aviso a la hora. ¡Dale!"
 
-    def _reply_task_created(self, title: str) -> str:
+    def _reply_task_created(self, title: str, due_time: str = "", due_date: str = "", category: str = "") -> str:
+        parts = [f"Tarea '{title}'"]
+        if due_date:
+            parts.append(f"para el {due_date}")
+        if due_time:
+            parts.append(f"a las {due_time}")
+        if category:
+            parts.append(f"[{category}]")
+        done = " ".join(parts)
         if self.tone == Tone.FIRME:
-            return f"Tarea '{title}' creada. A hacerla."
-        return f"¡Listo! ✅ Tarea '{title}' anotada. ¿Querés que busque un hueco para hoy?"
+            return f"{done} creada. A hacerla."
+        return f"¡Listo! ✅ {done}. ¿Querés que busque un hueco para hoy?"
 
     def _reply_habit_created(self, name: str, veces: int, hora: str) -> str:
         if self.tone == Tone.FIRME:
@@ -735,10 +787,11 @@ class MateAgent:
                         # Hacer JSON-serializable (convertir datetime, etc.)
                         response_data = self._make_json_serializable(response_data)
 
+                        # Wrap in {"result": ...} as Gemini expects
                         function_responses.append({
                             "functionResponse": {
                                 "name": tc.name,
-                                "response": response_data
+                                "response": {"result": response_data}
                             }
                         })
                     except Exception as e:
@@ -747,12 +800,25 @@ class MateAgent:
                         function_responses.append({
                             "functionResponse": {
                                 "name": tc.name,
-                                "response": {"error": str(e)}
+                                "response": {"result": {"error": str(e)}}
                             }
                         })
 
                 # Añadir TODOS los functionResponse en UN solo mensaje (mismo orden que functionCall)
                 if function_responses:
+                    # Validar que ningún part esté vacío o malformado
+                    for i, part in enumerate(function_responses):
+                        if not isinstance(part, dict) or "functionResponse" not in part:
+                            logger.error(f"Part {i} malformado (no es functionResponse): {part}")
+                            raise ValueError(f"Invalid functionResponse part at index {i}")
+                        fr = part["functionResponse"]
+                        if not isinstance(fr, dict) or "name" not in fr or "response" not in fr:
+                            logger.error(f"Part {i} functionResponse malformado: {part}")
+                            raise ValueError(f"Invalid functionResponse structure at index {i}")
+                        if not isinstance(fr["response"], dict) or "result" not in fr["response"]:
+                            logger.error(f"Part {i} response missing 'result': {part}")
+                            raise ValueError(f"Missing 'result' in functionResponse at index {i}")
+
                     messages.append({
                         "role": "user",
                         "parts": function_responses
