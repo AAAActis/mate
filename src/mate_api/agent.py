@@ -178,7 +178,14 @@ class LLMClient:
         contents = []
         for msg in messages:
             role = msg.get("role")
+            # Mensajes ya armados en formato nativo de Gemini (model con functionCall, user con functionResponse): pasan tal cual
+            if isinstance(msg.get("parts"), list):
+                gemini_role = "model" if role in ("model", "assistant") else "user"
+                contents.append({"role": gemini_role, "parts": msg["parts"]})
+                continue
             content = msg.get("content")
+            if content is None and role in ("user", "assistant"):
+                continue
 
             if role == "system":
                 system_instruction = {"parts": [{"text": content}]}
