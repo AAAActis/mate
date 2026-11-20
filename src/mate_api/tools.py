@@ -1,9 +1,10 @@
+from typing import Optional, List, Tuple
 """
 Las 8 Herramientas del Agente Mate - Ejecutadas server-side con session_id inyectado.
 El LLM NUNCA escribe SQL directo; solo invoca estas funciones tipadas.
 """
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Literal, List, Tuple
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -29,100 +30,16 @@ from .models import (
     CalendarBlockRead,
     MemoryRead,
     Category,
+    CrearTareaArgs,
+    ListarHoyArgs,
+    CrearHabitoArgs,
+    RegistrarCumplimientoArgs,
+    BuscarHuecoArgs,
+    ReservarBloqueArgs,
+    CrearRecordatorioArgs,
+    GuardarDatoArgs,
 )
 from .security import PiiRedactor
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Schemas de argumentos (Pydantic v2 estricto)
-# ──────────────────────────────────────────────────────────────────────
-
-class CrearTareaArgs(BaseModel):
-    titulo: str = Field(min_length=1, max_length=160)
-    hora_sugerida: Optional[str] = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
-
-    @field_validator("titulo")
-    @classmethod
-    def no_html(cls, v: str) -> str:
-        if "<" in v or ">" in v:
-            raise ValueError("No se permite HTML en el título")
-        return v.strip()
-
-
-class ListarHoyArgs(BaseModel):
-    pass  # Sin argumentos
-
-
-class CrearHabitoArgs(BaseModel):
-    nombre: str = Field(min_length=1, max_length=120)
-    veces_por_semana: int = Field(default=3, ge=1, le=7)
-    hora_habitual: str = Field(default="19:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
-
-    @field_validator("nombre")
-    @classmethod
-    def no_html(cls, v: str) -> str:
-        if "<" in v or ">" in v:
-            raise ValueError("No se permite HTML en el nombre")
-        return v.strip()
-
-
-class RegistrarCumplimientoArgs(BaseModel):
-    tipo: Literal["tarea", "habito"]
-    item_id: int = Field(ge=1)
-
-
-class BuscarHuecoArgs(BaseModel):
-    duracion_minutos: int = Field(default=60, ge=15, le=480)
-    fecha_iso: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-
-
-class ReservarBloqueArgs(BaseModel):
-    titulo: str = Field(min_length=1, max_length=120)
-    inicio_iso: str  # ISO 8601 UTC
-    fin_iso: str     # ISO 8601 UTC
-    categoria: Literal["estudio", "gym", "personal"] = "estudio"
-
-    @field_validator("titulo")
-    @classmethod
-    def no_html(cls, v: str) -> str:
-        if "<" in v or ">" in v:
-            raise ValueError("No se permite HTML en el título")
-        return v.strip()
-
-    @field_validator("inicio_iso", "fin_iso")
-    @classmethod
-    def validate_iso(cls, v: str) -> str:
-        try:
-            datetime.fromisoformat(v.replace("Z", "+00:00"))
-        except ValueError:
-            raise ValueError("Formato ISO 8601 inválido (esperado: 2026-11-14T16:00:00+00:00)")
-        return v
-
-
-class CrearRecordatorioArgs(BaseModel):
-    titulo: str = Field(min_length=1, max_length=120)
-    fecha_iso: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
-    hora: str = Field(default="09:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
-
-    @field_validator("titulo")
-    @classmethod
-    def no_html(cls, v: str) -> str:
-        if "<" in v or ">" in v:
-            raise ValueError("No se permite HTML en el título")
-        return v.strip()
-
-
-class GuardarDatoArgs(BaseModel):
-    clave: str = Field(min_length=1, max_length=60)
-    valor: str = Field(min_length=1, max_length=500)
-    fecha_evento: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-
-    @field_validator("clave", "valor")
-    @classmethod
-    def no_html(cls, v: str) -> str:
-        if "<" in v or ">" in v:
-            raise ValueError("No se permite HTML")
-        return v.strip()
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -165,13 +82,20 @@ async def tool_crear_tarea(session_id: str, args: dict) -> ToolResult:
         return ToolResult(success=False, error=str(e))
 
 
+CORDOBA_TZ = ZoneInfo("America/Argentina/Cordoba")
+
 async def tool_listar_hoy(session_id: str, args: dict) -> ToolResult:
-    """2. Devuelve tareas de hoy, hábitos pendientes, bloques de hoy y recordatorios próximos."""
+    """2. Devuelve tareas de hoy, hábitos pendientes, bloques de hoy y recordatorios próximos.
+    Todos los cálculos de "hoy" y la franja 08:00-22:00 se hacen en hora Córdoba,
+    guardando en UTC en la base de datos."""
     try:
         validated = ListarHoyArgs(**args)
-        tasks = await list_tasks_today(session_id)
-        habits = await list_habits(session_id)
-        blocks = await list_blocks_today(session_id)
+        now_cordoba = datetime.now(CORDOBA_TZ)
+        today_iso = now_cordoba.strftime("%Y-%m-%d")
+        # Pasamos today_iso a las herramientas para que usen Córdoba
+        tasks = await list_tasks_today(session_id, {"today_iso": today_iso})
+        habits = await list_habits(session_id, {"today_iso": today_iso})
+        blocks = await list_blocks_today(session_id, {"today_iso": today_iso})
         memories = await get_upcoming_memory_events(session_id, days_ahead=7)
         result = ListarHoyResult(
             tasks=tasks,
@@ -228,10 +152,14 @@ async def tool_registrar_cumplimiento(session_id: str, args: dict) -> ToolResult
 
 
 async def tool_buscar_hueco(session_id: str, args: dict) -> ToolResult:
-    """5. Analiza calendar_blocks del día (08:00-22:00) y devuelve hasta 3 franjas libres."""
+    """5. Analiza calendar_blocks del día (08:00-22:00 en hora Córdoba)
+    y devuelve hasta 3 franjas libres. Los cálculos de "hoy" y la franja 08:00-22:00
+    se hacen en America/Argentina/Cordoba, guardando en UTC y devuelve ISO con offset."""
     try:
         validated = BuscarHuecoArgs(**args)
-        slots = await find_free_slots(session_id, validated.duracion_minutos, validated.fecha_iso)
+        # Usar today_iso si viene de listar_hoy, sino calcular en Córdoba
+        today_iso = args.get("today_iso") or datetime.now(CORDOBA_TZ).strftime("%Y-%m-%d")
+        slots = await find_free_slots(session_id, validated.duracion_minutos, today_iso)
         result = BuscarHuecoResult(slots=slots)
         return ToolResult(success=True, data=result.model_dump())
     except Exception as e:

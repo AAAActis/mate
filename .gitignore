@@ -34,4 +34,4 @@ htmlcov/
 .pytest_cache/
 
 # Docker
-.docker/
+.docker/.claude/settings.local.json

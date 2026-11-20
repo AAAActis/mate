@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "src/mate_api/static/index.html"
+        ],
+        "createdAt": "2026-11-18T17:52:14.832Z",
+        "reason": "spec: CONTEXTO-FRONTEND.md §2 fija la paleta crema 'sin cambios de valores'"
+      }
+    ]
+  }
+}

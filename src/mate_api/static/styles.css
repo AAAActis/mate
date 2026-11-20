@@ -144,7 +144,12 @@ body {
   border-radius: 24px;
   overflow: hidden;
   min-height: 0; min-width: 0;
+  z-index: 1;
 }
+
+/* Capa de fondo (z-index 0) + elementos de primer plano (z-index 1) */
+.escenario > *:not(.hojas-yerba) { z-index: 1; }
+.escenario .hojas-yerba { z-index: 0; }
 
 /* Fondo del escenario: manchas suaves y hojas de yerba */
 .escenario::before {
@@ -363,46 +368,3 @@ dialog code { display: block; padding: 10px; margin-bottom: 12px; background: va
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
-/* ── §6 Tabla de visibilidad por estado (solo CSS, display:none por omisión) ───────────────────────────────── */
-[data-state="neutro"] .ojos-abiertos,
-[data-state="neutro"] .boca-neutro,
-[data-state="neutro"] .brazos-saludo { display: block; }
-[data-state="neutro"] .ojos-felices,
-[data-state="neutro"] .cejas-serio,
-[data-state="neutro"] .boca-contento,
-[data-state="neutro"] .boca-hablando,
-[data-state="neutro"] .boca-serio,
-[data-state="neutro"] .brazos-arriba,
-[data-state="neutro"] .brazos-jarra { display: none; }
-
-[data-state="hablando"] .ojos-abiertos,
-[data-state="hablando"] .boca-hablando,
-[data-state="hablando"] .brazos-saludo { display: block; }
-[data-state="hablando"] .ojos-felices,
-[data-state="hablando"] .boca-neutro,
-[data-state="hablando"] .boca-contento,
-[data-state="hablando"] .cejas-serio,
-[data-state="hablando"] .brazos-arriba,
-[data-state="hablando"] .brazos-jarra { display: none; }
-
-[data-state="contento"] .ojos-felices,
-[data-state="contento"] .boca-contento,
-[data-state="contento"] .brazos-arriba { display: block; }
-[data-state="contento"] .ojos-abiertos,
-[data-state="contento"] .boca-neutro,
-[data-state="contento"] .boca-hablando,
-[data-state="contento"] .boca-serio,
-[data-state="contento"] .cejas-serio,
-[data-state="contento"] .brazos-saludo,
-[data-state="contento"] .brazos-jarra { display: none; }
-
-[data-state="serio"] .ojos-abiertos,
-[data-state="serio"] .cejas-serio,
-[data-state="serio"] .boca-serio,
-[data-state="serio"] .brazos-jarra { display: block; }
-[data-state="serio"] .ojos-felices,
-[data-state="serio"] .boca-neutro,
-[data-state="serio"] .boca-contento,
-[data-state="serio"] .boca-hablando,
-[data-state="serio"] .brazos-saludo,
-[data-state="serio"] .brazos-arriba { display: none; }

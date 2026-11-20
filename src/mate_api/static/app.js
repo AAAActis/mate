@@ -23,41 +23,12 @@ $('btn-tema').addEventListener('click', () => {
 
 // ── Mate y globo ─────────────────────────────────────────────────────────────
 function setEstado(estado) {
-  $('mate').setAttribute('data-state', ESTADOS.includes(estado) ? estado : 'neutro');
-}
-function decir(texto, estado = 'hablando') {
-  const esLargo = texto.length > 90;
-  const corto = $('globo-texto');
-  const largo = $('globo-texto-largo');
-  const copiarBtn = document.querySelector('.copiar-btn');
-
-  // Mostrar/ocultar según largo/corto
-  corto.hidden = esLargo;
-  largo.hidden = !esLargo;
-  copiarBtn.hidden = !esLargo;
-
-  if (esLargo) {
-    largo.textContent = texto;
-    // Animación palabra por palabra (35 ms por palabra)
-    const palabras = texto.split(' ');
-    largo.innerHTML = '';
-    for (const [i, p] of palabras.entries()) {
-      const span = document.createElement('span');
-      span.style.transition = 'opacity 240ms var(--ease)';
-      span.style.opacity = i === 0 ? '1' : '0';
-      span.textContent = p + ' ';
-      largo.appendChild(span);
-    }
-    // Trigger reflow for animation
-    largo.offsetWidth;
-    for (const span of largo.children) {
-      span.style.opacity = '1';
-    }
-  } else {
-    corto.textContent = texto;
+  const ESTADOS = ['neutro', 'hablando', 'contento', 'serio'];
+  const normalized = ESTADOS.includes(estado) ? estado : 'neutro';
+  const $mate = $('mate');
+  if ($mate.getAttribute('data-state') !== normalized) {
+    $mate.setAttribute('data-state', normalized);
   }
-
-  setEstado(estado);
 }
 function mostrarChips(herramientas) {
   const cont = $('globo-chips');
@@ -85,7 +56,7 @@ function pintarSesion() {
   marcarTono(sesion.tone);
   $('contador-cuota').textContent = String(sesion.session?.messages_count_today ?? 0);
   pintarAgenda();
-  if (sesion.greeting) decir(sesion.greeting.text, sesion.greeting.avatar_state);
+  if (sesion.greeting) decirSaludo(sesion.greeting.text, sesion.greeting.avatar_state);
 }
 
 function hhmm(iso) {
@@ -189,7 +160,7 @@ async function enviar(texto) {
     decir(data.reply, data.avatar_state);
     mostrarChips(data.tools_executed || []);
     input.value = '';
-    await cargarSesion().catch(() => {});
+    await cargarSesion().catch((e) => console.error('Error al recargar sesión:', e));
   } catch (e) {
     console.error(e);
     decir('Hubo un error, che. Probá de nuevo en un rato.', 'neutro');
@@ -283,5 +254,56 @@ function conectarSSE() {
     console.error(e);
     decir('No pude cargar tu sesión. Recargá la página.', 'serio');
   }
-  conectarSSE();
+  // ── Logo sidebar: clon dinámica de #mate ─────────────────────────────────────
+(function setupSidebarLogo() {
+  const $mate = $('mate');
+  const $logo = $('sidebar-logo');
+  if ($mate && $logo) {
+    // Clonar el SVG, quitar id y data-state="contento", width 44px
+    const $clone = $mate.cloneNode(true);
+    $clone.removeAttribute('id');
+    $clone.removeAttribute('data-state');
+    $clone.setAttribute('data-state', 'contento');
+    $clone.style.width = '44px';
+    $clone.style.height = 'auto';
+    // Limpiar clases que puedan conflictar, mantener solo las esenciales
+    const classesToKeep = ['mate', 'm-cuerpo', 'm-brazos', 'm-bombilla', 'm-ojos', 'm-boca', 'm-virola', 'm-yerba'];
+    const allClasses = $clone.classList;
+    const keepSet = new Set(classesToKeep);
+    const newClasses = Array.from(allClasses).filter(c => keepSet.has(c));
+    allClasses.remove(...allClasses);
+    newClasses.forEach(c => allClasses.add(c));
+    $logo.innerHTML = ''; // Limpiar texto "Mate"
+    $logo.appendChild($clone);
+  }
 })();
+
+conectarSSE();
+})();
+
+// decir(): muestra el texto en el globo y pone al Mate a hablar un rato
+function decir(texto) {
+  const t = String(texto == null ? "" : texto);
+  const largo = t.length > 90;
+  const globo = document.getElementById("globo");
+  const corto = document.getElementById("globo-texto");
+  const lar = document.getElementById("globo-texto-largo");
+  if (globo) globo.classList.toggle("largo", largo);
+  if (corto) { corto.textContent = largo ? "" : t; corto.hidden = largo; }
+  if (lar) { lar.textContent = largo ? t : ""; lar.hidden = !largo; }
+  if (!corto && !lar && globo) globo.textContent = t;
+  const mate = document.getElementById("mate");
+  if (!mate) return;
+  mate.setAttribute("data-state", "hablando");
+  clearTimeout(decir._t);
+  decir._t = setTimeout(function () {
+    if (mate.getAttribute("data-state") === "hablando") mate.setAttribute("data-state", "neutro");
+  }, Math.min(6000, 900 + t.length * 35));
+}
+
+// el saludo se muestra una sola vez; despues no pisa las respuestas
+function decirSaludo(texto) {
+  if (decirSaludo.ya) return;
+  decirSaludo.ya = true;
+  decir(texto);
+}

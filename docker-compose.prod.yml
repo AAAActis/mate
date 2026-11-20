@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  mate-api:
+    build: .
+    container_name: mate-api
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: 0.5
+    ports:
+      - "127.0.0.1:5003:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - REDIS_URL=
+      - DAILY_TOKEN_BUDGET=50000
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: 3
+    networks:
+      - default
+      - arch-net
+
+networks:
+  default:
+  arch-net:
+    external: true

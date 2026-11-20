@@ -80,6 +80,7 @@ class HabitRead(HabitBase):
     session_id: str
     done_this_week: int = 0
     last_checkin_date: Optional[str] = None
+    completed: bool = False
     created_at_utc: datetime
 
 

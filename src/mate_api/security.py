@@ -201,6 +201,8 @@ class InMemoryRateLimiter(RateLimiter):
 
     def _cleanup(self, identifier: str, now: float) -> None:
         if identifier in self._store:
+            # Use > to expire entries at the window boundary (exclusive start)
+            # This ensures exactly `limit` requests per `window` seconds
             self._store[identifier] = [t for t in self._store[identifier] if t > now - self.window]
 
     async def check(self, identifier: str) -> tuple[bool, int]:

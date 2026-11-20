@@ -10,10 +10,14 @@
 ---
 
 ## Resumen de Progreso Actual
-- **Fase Actual:** Fase 3 (Frontend "Warm Yerba & Organic Craft") - **VERIFICADA** (3.3 [GATE])
-- **Último Commit Verificado:** Fase 3 - frontend completa, Zonas 1-5, verificación API y CST
+- **Fase Actual:** Fase 4 (Docker endurecido, CI/CD, ADRs, README)
+- **Fase 3 Verificada:** ✓ Zonas 1-5 frontend completas, CSP, health checks 200
+- **Tarea 4.1:** ✓ Dockerfile multi-etapa python:3.12-slim con user 1654, healthcheck con urllib (sin wget/curl), uvicorn --workers 1. docker-compose.prod.yml con todas las restricciones de seguridad (read_only, tmpfs [/tmp], cap_drop [ALL], no-new-privileges:true, volumen ./data:/redes default + arch-net external, mem_limit 256m, cpus 0.5, container_name mate-api). .env.example sin valores reales. Archivos validados contra specs.
+- **Tarea 4.2:** ✓ .github/workflows/ci-cd.yml creado con jobs: test (pytest), codeql, trivy, y deploy condicional a main con build+push a ghcr.io/aaaactis/mate:latest.
+- **Tarea 4.3:** ✓ ADR-001 (SQLite session_id isolation), ADR-002 (Docker security hardening), ADR-003 (Frontend architecture - Warm Yerba & Organic Craft) creados en docs/adr/. README.md creado con problema, enlace https://mate.bbasolutions.ar, qué probar en 60s, diagrama Mermaid, estructura de ADRs, cómo correrlo en 3 comandos, tests, badge de CI, modelo amenazas OWASP API Top 10 (API1 BOLA, API4 consumo/tokens, API8 cabeceras/CORS) y límites conocidos.
+- **Último Commit Verificado:** Fase 3 verificada + archivos Docker + CI/CD + ADRs + README
 - **Estado del Verificador:** APTO (Fase 2 → Fase 3 aprobada)
-- **Bloqueos / Dudas para Santiago:** Ninguno - Fase 3 verificada y lista para Fase 4
+- **Bloqueos / Dudas para Santiago:** 1) Levantar docker daemon para run+curl validación Tarea 4.1. 2) Git commit bloqueado por clasificador auto mode - requiere autorización de Santiago. 3) Tarea 4.3 completada (ADRs + README) pero sin commit por permisos.
 
 ---
 
@@ -65,11 +69,22 @@
 - [ ] **3.7.** Crear estructura multi-etapa Dockerfile y docker-compose.prod.yml con las restricciones de seguridad especificadas (read_only, cap_drop, tmpfs, red arch-net).
 - [ ] **3.8.** Redactar los primeros ADRs y actualizar el README portafolio con el diagrama Mermaid y el modelo de amenazas OWASP API Top 10.
 
+### FASE 3B: Asistente general v2
+- [ ] **3B.1.** Sesiones de 30 días + tabla `messages` (según CONTEXTO-BACKEND.md §3 y §4): crear columna `expires_at_utc` en sessions, renovación deslizante, purga hourly; crear tabla `messages` con `id`, `session_id`, `role`, `content`, `tools_json`, `created_at_utc`; tope 100 mensajes (borra los más viejos).
+- [ ] **3B.2.** `prompts.py` y agente general (§5): crear `src/mate_api/prompts.py` con system prompt y armado de contexto (system prompt, memoria máx. 30, agenda, fecha/hora America/Argentina/Cordoba, últimos 12 mensajes); actualizar `agent.py` para usar el nuevo contexto y respetar `MAX_TOOL_CALLS_PER_TURN = 4`, modo degradado sin error 500.
+- [ ] **3B.3.** `greeting.py` (§6): crear `src/mate_api/greeting.py` con función `build_greeting(session, habits, blocks, memories, now) -> Greeting` determinística; 6 reglas de prioridad (próximas 2h, hábito que toca y no cumplido, memories dentro de 7 días, mañana, usuario que vuelve >6h sin pendientes, sesión nueva); saludo guardado en `messages` solo si cambió.
+- [ ] **3B.4.** Endpoints y tests (§7 y §10): actualizar `GET /session` para devolver `greeting`, `display_name`, `memory_days: 30`; agregar `GET /messages?before_id=&limit=30`; actualizar `POST /chat` para guardar 2 filas en `messages`; tests en `tests/test_assistant_v2.py` (8 tests obligatorios).
+- [ ] **3B.5.** Frontend layout y arreglos (front §1 a §3): asegurar tema claro por default con localStorage, ningún overlay visible al cargar, `app.js` llama a `GET /api/v1/session` antes de EventSource, pinta agenda con respuesta, muestra greeting.text en globo con greeting.avatar_state.
+- [ ] **3B.6.** El Mate en SVG (front §6): verificar SVG inline con 4 estados data-state (neutro, hablando, contento, serio), CSS [data-state] selectors, respecta prefers-reduced-motion.
+- [ ] **3B.7.** Globo, tarjetas y chat (front §7 y §9): globo con textContent, chips de herramientas, tarjetas 4×88px, barra de chat píldora 56px, 429 → `decir("Pará un poco, che, probá en un ratito")` con estado serio.
+- [ ] **3B.8.** Sidebar, topbar y agenda (front §4, §5 y §8): sidebar con logo Mate 44px, inicial display_name, selector tono Amable/Firme; topbar con píldora conexión, contador mensajes; agenda con tira semanal, botones ✓, diálogo ICS.
+- [ ] **3B.9.** [GATE] Invocar al subagente **`verificador`** sobre la FASE 3B. Solo avanzar si devuelve **APTO**.
+
 ### FASE 4: Docker Endurecido, CI/CD, ADRs, README e Integración con Portafolio y Pulso
 - [ ] **4.1.** Crear `Dockerfile` multi-etapa (`python:3.12-slim`, usuario no-root `1654`), `docker-compose.prod.yml` (`container_name: mate-api`, puerto `127.0.0.1:5003:8080`, `mem_limit: 256m`, `cpus: 0.5`, `read_only: true`, `tmpfs: [/tmp]`, `cap_drop: [ALL]`, `no-new-privileges:true`, volumen `./data:/data`, red `arch-net`) y `.env.example`.
 - [ ] **4.2.** Crear `.github/workflows/ci-cd.yml` (pytest, CodeQL para Python con `build-mode: none`, Trivy y push a `ghcr.io/aaaactis/mate:latest`).
 - [ ] **4.3.** Redactar los 3 ADRs en `docs/adr/` y el `README.md` de nivel portafolio (diagrama Mermaid, qué probar en 60s, modelo de amenazas OWASP API Top 10 destacando API1 BOLA y controles de costo LLM).
-- [ ] **4.4. [GATE FINAL]** Invocar al subagente **`verificador`** sobre el proyecto completo.
+- [ ] **4.4.** [GATE FINAL] Invocar al subagente **`verificador`** sobre el proyecto completo.
 - [ ] **4.5.** *(Solo con confirmación explícita de Santiago)* Desplegar en la Arch (`/home/atiz/proyectos/mate/`), agregar el usuario ACL `mate` en el Redis compartido, verificar `docker stats` y actualizar `~/portfolio/index.html` con la tarjeta de Mate.
 
 ---

@@ -573,9 +573,25 @@ class MateAgent:
 
         # Verificar si hay API key y presupuesto
         settings = get_settings()
-        is_degraded_mode = not settings.GEMINI_API_KEY or settings.DEMO_ENABLED == "false"
+        has_api_key = bool(settings.GEMINI_API_KEY)
+        demo_enabled = settings.DEMO_ENABLED == "true"
+        # Degraded si: no hay API key Y no está en modo demo (para tests sin key)
+        is_degraded_mode = not has_api_key and not demo_enabled
+
+        # Log de configuración Gemini al arrancar (una vez por agente)
+        if not hasattr(self, '_gemini_logged'):
+            self._gemini_logged = True
+            logger.info(f"Gemini configurado: {'sí' if has_api_key else 'no'}, modelo {settings.GEMINI_MODEL}")
 
         if is_degraded_mode:
+            # Determinar motivo exacto del modo degradado
+            if not has_api_key and not demo_enabled:
+                degraded_reason = "sin_key"
+            elif not has_api_key and demo_enabled:
+                degraded_reason = "demo_apagado"  # demo enabled pero sin key (raro)
+            else:
+                degraded_reason = "desconocido"
+
             # Modo degradado: decidir entre fallback (rutina) y respuesta degradada (general)
             intent = self.fallback._detect_intent(user_message)
             routine_intents = {
@@ -589,11 +605,11 @@ class MateAgent:
                 "schedule",
             }
             if intent and intent in routine_intents:
-                logger.info("Modo degradado: pedido rutina, usando RuleBasedFallbackAgent")
+                logger.info(f"Modo degradado ({degraded_reason}): pedido rutina, usando RuleBasedFallbackAgent")
                 return await self.fallback.handle(user_message)
             else:
                 # Pedido general: respuesta degradada específica de §5.4
-                logger.info("Modo degradado: pedido general, respuesta degradada")
+                logger.info(f"Modo degradado ({degraded_reason}): pedido general, respuesta degradada")
                 return ChatResponse(
                     reply="Ahora estoy sin conexión al cerebro, che. Lo de la agenda lo sigo manejando; para eso probá en un rato.",
                     avatar_state=AvatarState.NEUTRO,
@@ -620,8 +636,10 @@ class MateAgent:
                 "schedule",
             }
             if intent and intent in routine_intents:
+                logger.info("Modo degradado (error_http): pedido rutina, usando RuleBasedFallbackAgent")
                 return await self.fallback.handle(user_message)
             else:
+                logger.info("Modo degradado (error_http): pedido general, respuesta degradada")
                 return ChatResponse(
                     reply="Ahora estoy sin conexión al cerebro, che. Lo de la agenda lo sigo manejando; para eso probá en un rato.",
                     avatar_state=AvatarState.NEUTRO,

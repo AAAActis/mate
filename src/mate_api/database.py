@@ -2,6 +2,7 @@ import aiosqlite
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Optional
 
@@ -309,8 +310,8 @@ async def create_task(session_id: str, title: str, due_time: Optional[str] = Non
     )
 
 
-async def list_tasks_today(session_id: str) -> list[TaskRead]:
-    today = datetime.now().strftime("%Y-%m-%d")
+async def list_tasks_today(session_id: str, args: dict = None) -> list[TaskRead]:
+    today_iso = (args or {}).get("today_iso") or datetime.now().strftime("%Y-%m-%d")
     async with get_connection() as conn:
         rows = await conn.execute(
             """
@@ -392,7 +393,8 @@ async def create_habit(
     )
 
 
-async def list_habits(session_id: str) -> list[HabitRead]:
+async def list_habits(session_id: str, args: dict = None) -> list[HabitRead]:
+    today_iso = (args or {}).get("today_iso") or datetime.now(CORDOBA_TZ).strftime("%Y-%m-%d")
     async with get_connection() as conn:
         rows = await conn.execute(
             "SELECT * FROM habits WHERE session_id = ? ORDER BY created_at_utc", (session_id,)
@@ -498,11 +500,17 @@ async def create_calendar_block(
     )
 
 
-async def list_blocks_today(session_id: str) -> list[CalendarBlockRead]:
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc).isoformat()
-    tomorrow_start = (datetime.now(timezone.utc) + timedelta(days=1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    ).isoformat()
+async def list_blocks_today(session_id: str, args: dict = None) -> list[CalendarBlockRead]:
+    today_iso = (args or {}).get("today_iso") or datetime.now(CORDOBA_TZ).strftime("%Y-%m-%d")
+    today_start = datetime.strptime(today_iso, "%Y-%m-%d").replace(
+        tzinfo=CORDOBA_TZ
+    ).astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    tomorrow_start = (
+        datetime.strptime(today_iso, "%Y-%m-%d")
+        .replace(tzinfo=CORDOBA_TZ)
+        .astimezone(timezone.utc)
+        + timedelta(days=1)
+    ).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     async with get_connection() as conn:
         rows = await conn.execute(
             """
@@ -552,15 +560,23 @@ async def list_upcoming_blocks(session_id: str, limit: int = 10) -> list[Calenda
     ]
 
 
+CORDOBA_TZ = ZoneInfo("America/Argentina/Cordoba")
+
 async def find_free_slots(
     session_id: str, duration_minutes: int = 60, date_iso: Optional[str] = None
 ) -> list[tuple[str, str]]:
-    """Devuelve hasta 3 franjas libres entre 08:00 y 22:00 para la fecha dada (hoy por defecto)."""
+    """Devuelve hasta 3 franjas libres entre 08:00 y 22:00 en hora de Córdoba,
+    guardando todo en UTC y devuelve ISO con offset. Si es medianoche/mañana,
+    el día se entiende en hora de Córdoba."""
     if date_iso is None:
-        date_iso = datetime.now().strftime("%Y-%m-%d")
+        # Usar hoy en hora Córdoba, luego formatear a UTC
+        now_cordoba = datetime.now(CORDOBA_TZ)
+        date_iso = now_cordoba.strftime("%Y-%m-%d")
 
-    day_start = f"{date_iso}T08:00:00+00:00"
-    day_end = f"{date_iso}T22:00:00+00:00"
+    # Construir los límites del día en hora Córdoba, luego a UTC
+    cordoba_midnight = datetime.strptime(date_iso, "%Y-%m-%d").replace(tzinfo=CORDOBA_TZ)
+    day_start_utc = cordoba_midnight.astimezone(timezone.utc).replace(hour=8, minute=0, second=0, microsecond=0).isoformat()
+    day_end_utc = cordoba_midnight.astimezone(timezone.utc).replace(hour=22, minute=0, second=0, microsecond=0).isoformat()
 
     async with get_connection() as conn:
         rows = await conn.execute(
@@ -569,13 +585,13 @@ async def find_free_slots(
             WHERE session_id = ? AND start_utc < ? AND end_utc > ?
             ORDER BY start_utc
             """,
-            (session_id, day_end, day_start),
+            (session_id, day_end_utc, day_start_utc),
         )
         rows = await rows.fetchall()
 
     blocks = [(parse_utc(r["start_utc"]), parse_utc(r["end_utc"])) for r in rows]
     slots: list[tuple[str, str]] = []
-    current = parse_utc(day_start)
+    current = parse_utc(day_start_utc)
     duration = timedelta(minutes=duration_minutes)
 
     for start, end in blocks:
@@ -585,7 +601,7 @@ async def find_free_slots(
                 return slots
         current = max(current, end)
 
-    if current + duration <= parse_utc(day_end):
+    if current + duration <= parse_utc(day_end_utc):
         slots.append((current.isoformat(), (current + duration).isoformat()))
 
     return slots[:3]

@@ -1,0 +1,109 @@
+/* ===== Mate: personaje SVG y sus 4 estados =====
+   Estados: data-state="neutro" | "hablando" | "contento" | "serio" en <svg id="mate"> */
+
+.mate {
+  --m-ink: var(--border-ink, #3a2e24);
+  --m-gourd: #9a5f33;
+  --m-gourd-light: #b77a47;
+  --m-gourd-shade: #6f3f1f;
+  --m-alpaca: #d9dcdb;
+  --m-alpaca-dark: #a9adab;
+  --m-yerba: #6a8a3a;
+  --m-mouth: #5e2a1a;
+  --m-tongue: #e07f70;
+  --m-cheek: #e8907a;
+  --m-spark: #6a8a3a;
+  width: 300px;
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+  display: block;
+  opacity: 1;
+  filter: none;
+}
+
+/* ---------- trazos y rellenos ---------- */
+.mate .m-piso { fill: var(--m-ink); opacity: .12; }
+.mate .m-cuerpo { fill: var(--m-gourd); stroke: var(--m-ink); stroke-width: 3.5; stroke-linejoin: round; }
+.mate .m-luz { fill: var(--m-gourd-light); opacity: .7; }
+.mate .m-sombra { fill: var(--m-gourd-shade); opacity: .45; }
+.mate .m-virola { fill: var(--m-alpaca); stroke: var(--m-ink); stroke-width: 3.5; }
+.mate .m-virola-brillo { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; opacity: .7; }
+.mate .m-yerba { fill: var(--m-yerba); stroke: var(--m-ink); stroke-width: 2.5; }
+.mate .m-yerba-grano { fill: none; stroke: #4e6a28; stroke-width: 2; stroke-linecap: round; }
+.mate .m-bombilla-borde { stroke: var(--m-ink); stroke-width: 12; stroke-linecap: round; }
+.mate .m-bombilla-metal { stroke: var(--m-alpaca); stroke-width: 6.5; stroke-linecap: round; }
+.mate .m-anillo { fill: var(--m-alpaca-dark); stroke: var(--m-ink); stroke-width: 2; }
+.mate .m-boquilla { fill: var(--m-alpaca); stroke: var(--m-ink); stroke-width: 2.5; stroke-linejoin: round; }
+.mate .m-mejilla { fill: var(--m-cheek); opacity: .6; }
+.mate .m-ojo circle { fill: var(--m-ink); }
+.mate .m-ojo .m-brillo { fill: #fff; }
+.mate .m-trazo { fill: none; stroke: var(--m-ink); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
+.mate .m-boca-fondo { fill: var(--m-mouth); stroke: var(--m-ink); stroke-width: 3; stroke-linejoin: round; }
+.mate .m-lengua { fill: var(--m-tongue); }
+.mate .m-brazo { fill: none; stroke: var(--m-ink); stroke-width: 5; stroke-linecap: round; }
+.mate .m-mano { fill: var(--m-gourd-light); stroke: var(--m-ink); stroke-width: 3; }
+.mate .m-destellos path { fill: var(--m-spark); }
+
+/* ---------- qué se ve en cada estado ---------- */
+.mate .m-ojos-felices,
+.mate .m-cejas,
+.mate .m-boca,
+.mate .m-brazos,
+.mate .m-destellos { display: none; }
+
+/* neutro */
+.mate[data-state="neutro"] .m-boca-neutro,
+.mate[data-state="neutro"] .m-brazos-saludo { display: inline; }
+
+/* hablando */
+.mate[data-state="hablando"] .m-boca-hablando,
+.mate[data-state="hablando"] .m-brazos-saludo { display: inline; }
+
+/* contento */
+.mate[data-state="contento"] .m-ojos-abiertos { display: none; }
+.mate[data-state="contento"] .m-ojos-felices,
+.mate[data-state="contento"] .m-boca-contento,
+.mate[data-state="contento"] .m-brazos-arriba,
+.mate[data-state="contento"] .m-destellos { display: inline; }
+
+/* serio */
+.mate[data-state="serio"] .m-cejas,
+.mate[data-state="serio"] .m-boca-serio,
+.mate[data-state="serio"] .m-brazos-jarra { display: inline; }
+.mate[data-state="serio"] .m-mejilla { opacity: .25; }
+
+/* ---------- animaciones ---------- */
+.mate .m-ojo,
+.mate .m-boca-hablando,
+.mate .m-mano-saluda,
+.mate .m-bombilla,
+.mate .m-destellos path { transform-box: fill-box; }
+
+.mate .m-ojo { transform-origin: center; }
+.mate[data-state="neutro"] .m-ojo,
+.mate[data-state="hablando"] .m-ojo { animation: m-parpadeo 4.2s infinite; }
+
+.mate .m-mano-saluda { transform-box: view-box; transform-origin: 196px 176px; }
+.mate[data-state="neutro"] .m-mano-saluda { animation: m-saludo 1.6s ease-in-out infinite alternate; }
+
+.mate .m-boca-hablando { transform-origin: center; }
+.mate[data-state="hablando"] .m-boca-hablando { animation: m-habla .16s ease-in-out infinite alternate; }
+
+.mate .m-bombilla { transform-box: view-box; transform-origin: 126px 94px; }
+.mate[data-state="hablando"] .m-bombilla { animation: m-vibra .3s ease-in-out infinite alternate; }
+
+.mate[data-state="contento"] { animation: m-salto .6s cubic-bezier(.22, 1, .36, 1) 2; }
+.mate .m-destellos path { transform-origin: center; }
+.mate[data-state="contento"] .m-destellos path { animation: m-brilla 1s ease-in-out infinite alternate; }
+
+@keyframes m-parpadeo { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+@keyframes m-saludo { from { transform: rotate(-10deg); } to { transform: rotate(14deg); } }
+@keyframes m-habla { from { transform: scaleY(.35); } to { transform: scaleY(1.05); } }
+@keyframes m-vibra { from { transform: rotate(-2deg); } to { transform: rotate(2deg); } }
+@keyframes m-salto { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } }
+@keyframes m-brilla { from { transform: scale(.7); opacity: .6; } to { transform: scale(1.1); opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mate, .mate * { animation: none !important; }
+}

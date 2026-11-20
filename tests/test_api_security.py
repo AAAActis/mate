@@ -28,9 +28,9 @@ async def client():
     os.environ["REDIS_URL"] = ""
     os.environ["GEMINI_API_KEY"] = ""
     os.environ["DEMO_ENABLED"] = "false"
-    # Rate limit alto para tests
+    # Rate limit alto para tests (ventana 120s para que quepan 1005 reqs secuenciales)
     os.environ["RATE_LIMIT_REQUESTS"] = "1000"
-    os.environ["RATE_LIMIT_WINDOW_SECONDS"] = "60"
+    os.environ["RATE_LIMIT_WINDOW_SECONDS"] = "120"
 
     import importlib
     from mate_api import database, config, main, security

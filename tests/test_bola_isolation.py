@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 
 from mate_api.database import (
     create_task,
@@ -20,6 +21,8 @@ from mate_api.database import (
 )
 from mate_api.models import Category
 
+CORDOBA_TZ = ZoneInfo("America/Argentina/Cordoba")
+
 
 class TestBolaIsolation:
     """Pruebas de aislamiento estricto por session_id (OWASP API1 - BOLA)."""
@@ -28,9 +31,13 @@ class TestBolaIsolation:
     async def setup_sessions(self, session_a, session_b):
         self.session_a = session_a
         self.session_b = session_b
-        # Fecha de hoy en ISO con timezone UTC para calendar blocks
-        self.today_iso = datetime.now(timezone.utc).replace(hour=16, minute=0, second=0, microsecond=0).isoformat()
-        self.today_iso_end = datetime.now(timezone.utc).replace(hour=17, minute=0, second=0, microsecond=0).isoformat()
+        # Usar hora Córdoba para que coincida con list_blocks_today
+        now_cordoba = datetime.now(CORDOBA_TZ)
+        today_start = now_cordoba.replace(hour=16, minute=0, second=0, microsecond=0)
+        today_end = now_cordoba.replace(hour=17, minute=0, second=0, microsecond=0)
+        # Convertir a UTC para guardar en BD
+        self.today_iso = today_start.astimezone(timezone.utc).isoformat()
+        self.today_iso_end = today_end.astimezone(timezone.utc).isoformat()
 
     # ── Tasks ──
 
