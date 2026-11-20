@@ -276,6 +276,138 @@ body {
 .agenda { display: flex; flex-direction: column; gap: 12px; padding: 18px; min-height: 0; }
 .agenda-head { display: flex; align-items: center; justify-content: space-between; }
 .agenda-head h2 { font-size: 16px; }
+
+/* ── Calendario mensual (zona-4) ────────────────────────────────────────────── */
+.calendario { display: flex; flex-direction: column; gap: 12px; }
+.calendario-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mes-titulo {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  flex: 1;
+}
+.calendario-dias-seman {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.calendario-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.calendario-dia {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 6px 4px 4px;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 150ms var(--ease), border-color 150ms var(--ease), color 150ms var(--ease);
+  position: relative;
+  min-height: 44px;
+}
+.calendario-dia:hover { background: var(--bg-accent-soft); }
+.calendario-dia.vacio { cursor: default; color: var(--text-muted); }
+.calendario-dia.vacio:hover { background: none; }
+.calendario-dia.hoy {
+  background: var(--yerba-olive);
+  color: #fbf7ee;
+  font-weight: 700;
+}
+.calendario-dia.seleccionado {
+  border-color: var(--yerba-olive);
+  background: var(--bg-accent-soft);
+}
+.calendario-dia.hoy.seleccionado {
+  background: var(--yerba-olive);
+  color: #fbf7ee;
+}
+.calendario-dia .dia-numero { z-index: 1; }
+.calendario-dia .dia-eventos {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.calendario-dia .evento-punto {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.calendario-dia .evento-punto.mas {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 7px; font-weight: 700; color: var(--text-muted);
+  border-radius: 999px;
+  background: var(--border-warm);
+  width: 16px; height: 16px;
+}
+
+/* ── Lista del día seleccionado ──────────────────────────────────────────────── */
+.dia-lista { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+.dia-titulo {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+.lista-dia { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; min-height: 0; }
+.item-dia {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-sidebar); border: 1.5px solid var(--border-warm); border-radius: 12px;
+  position: relative;
+  transition: background 150ms var(--ease), border-color 150ms var(--ease);
+}
+.item-dia:hover { background: var(--bg-card-hover); border-color: var(--yerba-olive); }
+.item-dia::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  border-radius: 12px 0 0 12px;
+}
+.item-dia.gym::before { background: #4a7aa8; }
+.item-dia.estudio::before { background: #c0603a; }
+.item-dia.trabajo::before { background: #6a8a3a; }
+.item-dia.personal::before { background: #8a6aa8; }
+.item-dia.hecho { opacity: 0.6; }
+.item-dia.hecho .item-dia-titulo { text-decoration: line-through; color: var(--text-muted); }
+.item-dia.hecho .item-dia-hora { color: var(--text-muted); }
+.item-dia-titulo { flex: 1; min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.item-dia-hora { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.item-dia .btn-check { flex-shrink: 0; }
+.dia-vacio { color: var(--text-muted); font-size: 14px; text-align: center; padding: 20px; }
+
+/* ── Leyenda categorías ──────────────────────────────────────────────────────── */
+.calendario-leyenda {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-warm);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.leyenda-item { display: flex; align-items: center; gap: 4px; }
+.leyenda-color { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+/* Legacy agenda styles (keep for backward compat) */
 .lista-agenda { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; }
 .item-agenda {
   display: flex; align-items: center; gap: 10px;
@@ -288,6 +420,10 @@ body {
 .btn-check { display: grid; place-items: center; width: 28px; height: 28px; background: none; border: 1.5px solid var(--border-warm); border-radius: 50%; color: var(--yerba-olive); }
 .btn-check:hover { background: var(--bg-accent-soft); }
 .agenda-vacia { color: var(--text-muted); font-size: 14px; }
+
+/* ── Tarjetas sugerencias ocultas tras primer mensaje ─────────────────────────── */
+.tarjetas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; min-height: 0; transition: opacity 200ms var(--ease), height 200ms var(--ease), margin 200ms var(--ease), padding 200ms var(--ease), visibility 0s linear 200ms; overflow: hidden; }
+.tarjetas.ocultas { opacity: 0; height: 0; margin: 0; padding: 0; visibility: hidden; pointer-events: none; }
 
 .tarjetas {
   display: grid;

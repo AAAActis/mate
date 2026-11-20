@@ -5,6 +5,10 @@ const ESTADOS = ['neutro', 'hablando', 'contento', 'serio'];
 let sesion = null;
 let eventSource = null;
 
+// ── Calendar state ───────────────────────────────────────────────────────────
+let calendarMonth = null; // Date object for current month in Córdoba (1st day of month)
+let selectedDay = null;   // YYYY-MM-DD string for selected day
+
 // ── Tema (§1.1): claro por defecto, oscuro solo si el usuario lo eligió ─────
 function leerTema() {
   try { return localStorage.getItem('mate-tema'); } catch { return null; }
@@ -33,11 +37,246 @@ function setEstado(estado) {
 function mostrarChips(herramientas) {
   const cont = $('globo-chips');
   cont.replaceChildren();
+
+  // Group by tool name to avoid duplicates
+  const counts = {};
   for (const h of herramientas) {
+    if (!h.success) continue; // Only show successful tools
+    const name = h.name;
+    counts[name] = (counts[name] || 0) + 1;
+  }
+
+  // Human-readable names
+  const displayNames = {
+    'crear_tarea': 'Tarea creada',
+    'reservar_bloque': 'Bloque agendado',
+    'crear_habito': 'Hábito creado',
+    'guardar_dato': 'Dato guardado',
+    'crear_recordatorio': 'Recordatorio',
+    'listar_hoy': 'Agenda',
+    'registrar_cumplimiento': 'Completado',
+    'buscar_hueco': 'Hueco encontrado'
+  };
+
+  for (const [name, count] of Object.entries(counts)) {
     const chip = document.createElement('span');
-    chip.className = 'chip';
-    chip.textContent = h.name;
+    chip.className = 'globo-chip';
+    chip.textContent = displayNames[name] || name + (count > 1 ? ` ×${count}` : '');
     cont.appendChild(chip);
+  }
+}
+
+// ── Date helpers in Córdoba timezone ─────────────────────────────────────────
+const CORDOBA_TZ = 'America/Argentina/Cordoba';
+
+// Returns "YYYY-MM-DD" for today in Córdoba
+function todayKeyCordoba() {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: CORDOBA_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(new Date());
+}
+
+// Returns "YYYY-MM-DD" for a Date constructed as local (y, m-1, d)
+function formatDateKey(date) {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: CORDOBA_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(date);
+}
+
+// Parse "YYYY-MM-DD" as local Córdoba date (no timezone conversion)
+function parseDateLocal(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+// Month name in Spanish (Argentina)
+function monthNameES(date) {
+  const fmt = new Intl.DateTimeFormat('es-AR', { timeZone: CORDOBA_TZ, month: 'long', year: 'numeric' });
+  return fmt.format(date);
+}
+
+// Day name in Spanish (Argentina)
+function dayNameES(date) {
+  const fmt = new Intl.DateTimeFormat('es-AR', { timeZone: CORDOBA_TZ, weekday: 'long' });
+  return fmt.format(date);
+}
+
+// First/last day of month for a Date (local y/m/d, treated as Córdoba)
+function getMonthBounds(date) {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1);
+  const last = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return { first, last };
+}
+
+// Day of week: 0=Monday ... 6=Sunday
+function getDayOfWeek(date) {
+  const dow = date.getDay();
+  return dow === 0 ? 6 : dow - 1;
+}
+
+// ── Calendar rendering ────────────────────────────────────────────────────────
+function getEventsForDate(dateKey) {
+  if (!sesion?.calendar) return [];
+  return sesion.calendar.filter(e => e.date === dateKey);
+}
+
+function getCategoryColor(category) {
+  const colors = {
+    'gym': '#4a7aa8',
+    'estudio': '#c0603a',
+    'trabajo': '#6a8a3a',
+    'personal': '#8a6aa8',
+    'recordatorio': '#8a6aa8'
+  };
+  return colors[category] || '#8a6aa8';
+}
+
+function renderCalendarGrid() {
+  try {
+    const grid = $('calendario-grid');
+    const titleEl = $('mes-actual');
+    if (!grid || !calendarMonth) return;
+
+    grid.replaceChildren();
+    titleEl.textContent = monthNameES(calendarMonth).replace(/^./, c => c.toUpperCase());
+
+    const { first, last } = getMonthBounds(calendarMonth);
+    const firstDow = getDayOfWeek(first); // 0=Monday
+    const daysInMonth = last.getDate();
+    const todayKey = todayKeyCordoba();
+
+    // Empty cells before first day
+    for (let i = 0; i < firstDow; i++) {
+      const empty = document.createElement('span');
+      empty.className = 'calendario-dia vacio';
+      grid.appendChild(empty);
+    }
+
+    // Days of month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+      const dateKey = formatDateKey(date);
+      const events = getEventsForDate(dateKey);
+      const isToday = dateKey === todayKey;
+      const isSelected = dateKey === selectedDay;
+
+      const cell = document.createElement('button');
+      cell.className = 'calendario-dia';
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-label', `${day} de ${calendarMonth.toLocaleString('es-AR', { month: 'long' })}`);
+      if (isToday) cell.classList.add('hoy');
+      if (isSelected) cell.classList.add('seleccionado');
+      cell.dataset.date = dateKey;
+
+      // Day number
+      const num = document.createElement('span');
+      num.className = 'dia-numero';
+      num.textContent = String(day);
+      cell.appendChild(num);
+
+      // Event dots (max 3, then +N)
+      if (events.length > 0) {
+        const dots = document.createElement('div');
+        dots.className = 'dia-eventos';
+        const maxDots = 3;
+        const showCount = Math.min(events.length, maxDots);
+        for (let i = 0; i < showCount; i++) {
+          const dot = document.createElement('span');
+          dot.className = 'evento-punto';
+          dot.style.background = getCategoryColor(events[i].category);
+          dots.appendChild(dot);
+        }
+        if (events.length > maxDots) {
+          const more = document.createElement('span');
+          more.className = 'evento-punto mas';
+          more.textContent = `+${events.length - maxDots}`;
+          dots.appendChild(more);
+        }
+        cell.appendChild(dots);
+      }
+
+      cell.addEventListener('click', () => selectDay(dateKey));
+      grid.appendChild(cell);
+    }
+  } catch (e) {
+    console.error('renderCalendarGrid error:', e);
+  }
+}
+
+function selectDay(dateKey) {
+  selectedDay = dateKey;
+  renderCalendarGrid();
+  renderDayList();
+}
+
+function renderDayList() {
+  try {
+    const list = $('lista-dia');
+    const titleEl = $('dia-seleccionado-titulo');
+    const emptyEl = $('dia-vacio');
+    if (!list || !selectedDay) return;
+
+    const events = getEventsForDate(selectedDay);
+    const dateObj = parseDateLocal(selectedDay);
+
+    // Update title
+    const todayKey = todayKeyCordoba();
+    const isToday = selectedDay === todayKey;
+    titleEl.textContent = isToday
+      ? `Hoy, ${dateObj.getDate()} de ${monthNameES(dateObj).split(' ')[0]}`
+      : `${dayNameES(dateObj).replace(/^./, c => c.toUpperCase())}, ${dateObj.getDate()} de ${monthNameES(dateObj).split(' ')[0]}`;
+
+    list.replaceChildren();
+
+    if (events.length === 0) {
+      emptyEl.hidden = false;
+      return;
+    }
+    emptyEl.hidden = true;
+
+    // Group by type: blocks first, then tasks, reminders, birthdays
+    const typeOrder = { block: 0, task: 1, reminder: 2, birthday: 3 };
+    events.sort((a, b) => (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99));
+
+    for (const ev of events) {
+      const li = document.createElement('li');
+      li.className = `item-dia ${ev.category}`;
+      if (ev.completed) li.classList.add('hecho');
+
+      const left = document.createElement('div');
+      left.style.display = 'flex';
+      left.style.flexDirection = 'column';
+      left.style.gap = '2px';
+      left.style.flex = '1';
+      left.style.minWidth = '0';
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'item-dia-titulo';
+      titleSpan.textContent = ev.title;
+      left.appendChild(titleSpan);
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'item-dia-hora';
+      timeSpan.textContent = ev.time;
+      left.appendChild(timeSpan);
+
+      li.appendChild(left);
+
+      // Checkbox for completable items (tasks only)
+      if (ev.type === 'task' && !ev.completed) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-check';
+        btn.setAttribute('aria-label', `Marcar "${ev.title}" como hecho`);
+        btn.textContent = '✓';
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          completar('task', ev.id);
+        });
+        li.appendChild(btn);
+      }
+
+      list.appendChild(li);
+    }
+  } catch (e) {
+    console.error('renderDayList error:', e);
   }
 }
 
@@ -50,13 +289,55 @@ async function cargarSesion() {
 }
 
 function pintarSesion() {
-  const nombre = sesion.display_name || 'Vos';
-  $('perfil-nombre').textContent = nombre;
-  $('perfil-inicial').textContent = nombre.charAt(0).toUpperCase();
-  marcarTono(sesion.tone);
-  $('contador-cuota').textContent = String(sesion.session?.messages_count_today ?? 0);
-  pintarAgenda();
-  if (sesion.greeting) decirSaludo(sesion.greeting.text, sesion.greeting.avatar_state);
+  try {
+    const nombre = sesion.display_name || 'Vos';
+    $('perfil-nombre').textContent = nombre;
+    $('perfil-inicial').textContent = nombre.charAt(0).toUpperCase();
+    marcarTono(sesion.tone);
+    $('contador-cuota').textContent = String(sesion.session?.messages_count_today ?? 0);
+    if (sesion.greeting) decirSaludo(sesion.greeting.text, sesion.greeting.avatar_state);
+
+    // Initialize calendar to current month in Córdoba (only first load)
+    if (!calendarMonth) {
+      const today = todayKeyCordoba();
+      const [y, m] = today.split('-').map(Number);
+      calendarMonth = new Date(y, m - 1, 1);
+      selectedDay = today;
+    }
+    renderCalendarGrid();
+    renderDayList();
+  } catch (e) {
+    console.error('pintarSesion error:', e);
+  }
+}
+
+function pintarAgenda() {
+  try {
+    const lista = $('lista-agenda');
+    if (!lista) return;
+    lista.replaceChildren();
+    const tasks = sesion.tasks || [];
+    const habits = sesion.habits || [];
+    const blocks = sesion.blocks || [];
+
+    for (const b of blocks) lista.appendChild(itemAgenda(b.title, hhmm(b.start_utc)));
+    for (const t of tasks) {
+      lista.appendChild(itemAgenda(t.title, t.due_time || '', () => completar('task', t.id), t.completed));
+    }
+    for (const h of habits) {
+      lista.appendChild(itemAgenda(h.name, `${h.done_this_week}/${h.target_per_week} sem.`, () => completar('habit', h.id)));
+    }
+
+    const total = tasks.length + habits.length + blocks.length;
+    const vacia = $('agenda-vacia');
+    const resumen = $('resumen-agenda');
+    if (vacia) vacia.hidden = total > 0;
+    if (resumen) resumen.textContent = total === 0
+      ? 'Nada agendado por ahora.'
+      : `${blocks.length} bloques, ${tasks.length} tareas y ${habits.length} hábitos.`;
+  } catch (e) {
+    console.error('pintarAgenda error:', e);
+  }
 }
 
 function hhmm(iso) {
@@ -83,28 +364,6 @@ function itemAgenda(titulo, meta, completar, hecho) {
     li.appendChild(b);
   }
   return li;
-}
-
-function pintarAgenda() {
-  const lista = $('lista-agenda');
-  lista.replaceChildren();
-  const tasks = sesion.tasks || [];
-  const habits = sesion.habits || [];
-  const blocks = sesion.blocks || [];
-
-  for (const b of blocks) lista.appendChild(itemAgenda(b.title, hhmm(b.start_utc)));
-  for (const t of tasks) {
-    lista.appendChild(itemAgenda(t.title, t.due_time || '', () => completar('task', t.id), t.completed));
-  }
-  for (const h of habits) {
-    lista.appendChild(itemAgenda(h.name, `${h.done_this_week}/${h.target_per_week} sem.`, () => completar('habit', h.id)));
-  }
-
-  const total = tasks.length + habits.length + blocks.length;
-  $('agenda-vacia').hidden = total > 0;
-  $('resumen-agenda').textContent = total === 0
-    ? 'Nada agendado por ahora.'
-    : `${blocks.length} bloques, ${tasks.length} tareas y ${habits.length} hábitos.`;
 }
 
 async function completar(tipo, id) {
@@ -160,6 +419,7 @@ async function enviar(texto) {
     decir(data.reply, data.avatar_state);
     mostrarChips(data.tools_executed || []);
     input.value = '';
+    hideSuggestionCards();
     await cargarSesion().catch((e) => console.error('Error al recargar sesión:', e));
   } catch (e) {
     console.error(e);
@@ -177,11 +437,13 @@ $('form-chat').addEventListener('submit', (e) => {
 });
 document.querySelectorAll('[data-prompt]').forEach((b) => b.addEventListener('click', () => {
   cerrarDrawer();
+  hideSuggestionCards();
   enviar(b.dataset.prompt);
 }));
 $('btn-nueva').addEventListener('click', () => {
   cerrarDrawer();
   mostrarChips([]);
+  showSuggestionCards();
   if (sesion?.greeting) decir(sesion.greeting.text, sesion.greeting.avatar_state);
   $('input-chat').focus();
 });
@@ -245,6 +507,36 @@ function conectarSSE() {
   });
 }
 
+// ── Month navigation ──────────────────────────────────────────────────────────
+$('btn-mes-anterior').addEventListener('click', () => {
+  calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1);
+  renderCalendarGrid();
+  renderDayList();
+});
+
+$('btn-mes-siguiente').addEventListener('click', () => {
+  calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
+  renderCalendarGrid();
+  renderDayList();
+});
+
+// ── Suggestion cards hide/show logic ──────────────────────────────────────────
+let firstMessageSent = false;
+function hideSuggestionCards() {
+  const tarjetas = document.querySelector('.tarjetas');
+  if (tarjetas && !firstMessageSent) {
+    tarjetas.classList.add('ocultas');
+    firstMessageSent = true;
+  }
+}
+function showSuggestionCards() {
+  const tarjetas = document.querySelector('.tarjetas');
+  if (tarjetas) {
+    tarjetas.classList.remove('ocultas');
+    firstMessageSent = false;
+  }
+}
+
 // ── Arranque ─────────────────────────────────────────────────────────────────
 (async function init() {
   aplicarTema(leerTema());
@@ -255,30 +547,30 @@ function conectarSSE() {
     decir('No pude cargar tu sesión. Recargá la página.', 'serio');
   }
   // ── Logo sidebar: clon dinámica de #mate ─────────────────────────────────────
-(function setupSidebarLogo() {
-  const $mate = $('mate');
-  const $logo = $('sidebar-logo');
-  if ($mate && $logo) {
-    // Clonar el SVG, quitar id y data-state="contento", width 44px
-    const $clone = $mate.cloneNode(true);
-    $clone.removeAttribute('id');
-    $clone.removeAttribute('data-state');
-    $clone.setAttribute('data-state', 'contento');
-    $clone.style.width = '44px';
-    $clone.style.height = 'auto';
-    // Limpiar clases que puedan conflictar, mantener solo las esenciales
-    const classesToKeep = ['mate', 'm-cuerpo', 'm-brazos', 'm-bombilla', 'm-ojos', 'm-boca', 'm-virola', 'm-yerba'];
-    const allClasses = $clone.classList;
-    const keepSet = new Set(classesToKeep);
-    const newClasses = Array.from(allClasses).filter(c => keepSet.has(c));
-    allClasses.remove(...allClasses);
-    newClasses.forEach(c => allClasses.add(c));
-    $logo.innerHTML = ''; // Limpiar texto "Mate"
-    $logo.appendChild($clone);
-  }
-})();
+  (function setupSidebarLogo() {
+    const $mate = $('mate');
+    const $logo = $('sidebar-logo');
+    if ($mate && $logo) {
+      // Clonar el SVG, quitar id y data-state="contento", width 44px
+      const $clone = $mate.cloneNode(true);
+      $clone.removeAttribute('id');
+      $clone.removeAttribute('data-state');
+      $clone.setAttribute('data-state', 'contento');
+      $clone.style.width = '44px';
+      $clone.style.height = 'auto';
+      // Limpiar clases que puedan conflictar, mantener solo las esenciales
+      const classesToKeep = ['mate', 'm-cuerpo', 'm-brazos', 'm-bombilla', 'm-ojos', 'm-boca', 'm-virola', 'm-yerba'];
+      const allClasses = $clone.classList;
+      const keepSet = new Set(classesToKeep);
+      const newClasses = Array.from(allClasses).filter(c => keepSet.has(c));
+      allClasses.remove(...allClasses);
+      newClasses.forEach(c => allClasses.add(c));
+      $logo.innerHTML = ''; // Limpiar texto "Mate"
+      $logo.appendChild($clone);
+    }
+  })();
 
-conectarSSE();
+  conectarSSE();
 })();
 
 // decir(): muestra el texto en el globo y pone al Mate a hablar un rato

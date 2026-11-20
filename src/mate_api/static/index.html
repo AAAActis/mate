@@ -184,8 +184,44 @@
           <h2>Tu agenda</h2>
           <button id="btn-ics" class="btn btn-small">Suscribir .ics</button>
         </div>
-        <ul id="lista-agenda" class="lista-agenda"></ul>
-        <p id="agenda-vacia" class="agenda-vacia" hidden>Nada agendado por ahora.</p>
+
+        <!-- Calendar grid (zona-4) -->
+        <div class="calendario" role="grid" aria-label="Calendario mensual">
+          <div class="calendario-header">
+            <button id="btn-mes-anterior" class="icon-btn" aria-label="Mes anterior" title="Mes anterior">
+              <svg class="icon" viewBox="0 0 20 20"><path d="M13 5l-6 5 6 5"/></svg>
+            </button>
+            <span id="mes-actual" class="mes-titulo" aria-live="polite"></span>
+            <button id="btn-mes-siguiente" class="icon-btn" aria-label="Mes siguiente" title="Mes siguiente">
+              <svg class="icon" viewBox="0 0 20 20"><path d="M7 5l6 5-6 5"/></svg>
+            </button>
+          </div>
+          <div class="calendario-dias-seman" role="row" aria-label="Días de la semana">
+            <span role="columnheader">Lu</span>
+            <span role="columnheader">Ma</span>
+            <span role="columnheader">Mi</span>
+            <span role="columnheader">Ju</span>
+            <span role="columnheader">Vi</span>
+            <span role="columnheader">Sá</span>
+            <span role="columnheader">Do</span>
+          </div>
+          <div id="calendario-grid" class="calendario-grid" role="grid" aria-label="Días del mes"></div>
+        </div>
+
+        <!-- Day list for selected day -->
+        <div class="dia-lista" aria-label="Eventos del día seleccionado">
+          <h3 id="dia-seleccionado-titulo" class="dia-titulo"></h3>
+          <ul id="lista-dia" class="lista-dia"></ul>
+          <p id="dia-vacio" class="dia-vacio" hidden>Nada para este día</p>
+        </div>
+
+        <!-- Category legend -->
+        <div class="calendario-leyenda" aria-label="Leyenda de categorías">
+          <span class="leyenda-item"><span class="leyenda-color" style="background:#4a7aa8"></span>Gym</span>
+          <span class="leyenda-item"><span class="leyenda-color" style="background:#c0603a"></span>Estudio</span>
+          <span class="leyenda-item"><span class="leyenda-color" style="background:#6a8a3a"></span>Trabajo</span>
+          <span class="leyenda-item"><span class="leyenda-color" style="background:#8a6aa8"></span>Personal</span>
+        </div>
       </aside>
     </div>
 
