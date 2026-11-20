@@ -44,7 +44,7 @@ class SessionCreate(SessionBase):
 
 
 class SessionRead(SessionBase):
-    last_seen_utc: datetime
+    last_seen_utc: Optional[datetime] = None
     display_name: Optional[str] = None
     messages_count_today: int = 0
 
@@ -52,6 +52,8 @@ class SessionRead(SessionBase):
 class TaskBase(BaseModel):
     title: TitleStr
     due_time: Optional[str] = Field(default=None, pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$")
+    due_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    category: Optional[Category] = None
 
 
 class TaskCreate(TaskBase):
@@ -123,6 +125,8 @@ class ToolArguments(BaseModel):
 class CrearTareaArgs(ToolArguments):
     titulo: TitleStr
     hora_sugerida: Optional[str] = Field(default=None, pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$")
+    fecha_sugerida: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    categoria: Optional[Category] = None
 
 
 class ListarHoyArgs(ToolArguments):

@@ -245,6 +245,113 @@ async def _ultimo_mensaje_assistant(session_id: str) -> Optional[dict]:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Helper: Calendar aggregation for /api/v1/session
+# ──────────────────────────────────────────────────────────────────────
+
+async def build_calendar_events(session_id: str) -> list[dict]:
+    """Construye lista unificada de eventos para los próximos 30 días:
+    tareas, bloques, recordatorios y cumpleaños de memories."""
+    from datetime import datetime, timedelta, timezone
+    from zoneinfo import ZoneInfo
+
+    CORDOBA_TZ = ZoneInfo("America/Argentina/Cordoba")
+    now_utc = datetime.now(timezone.utc)
+    cutoff_utc = now_utc + timedelta(days=30)
+    now_iso = now_utc.isoformat(timespec="seconds")
+    cutoff_iso = cutoff_utc.isoformat(timespec="seconds")
+
+    events = []
+
+    # Tareas con due_date
+    from .database import get_connection
+    async with get_connection() as conn:
+        rows = await conn.execute(
+            """
+            SELECT id, title, due_date, due_time, category, completed
+            FROM tasks
+            WHERE session_id = ? AND due_date IS NOT NULL
+            """,
+            (session_id,),
+        )
+        rows = await rows.fetchall()
+        for row in rows:
+            if row["due_date"]:
+                # Combine date + time if available
+                time_str = row["due_time"] or "00:00"
+                dt_str = f"{row['due_date']}T{time_str}:00-03:00"
+                try:
+                    dt = datetime.fromisoformat(dt_str)
+                    if now_utc <= dt <= cutoff_utc:
+                        events.append({
+                            "date": row["due_date"],
+                            "title": row["title"],
+                            "time": time_str,
+                            "category": row["category"] or "personal",
+                            "type": "task",
+                            "id": row["id"],
+                            "completed": bool(row["completed"]),
+                        })
+                except Exception:
+                    pass
+
+    # Bloques de calendario
+    from .database import list_upcoming_blocks
+    blocks = await list_upcoming_blocks(session_id, limit=100)
+    for block in blocks:
+        if block.start_utc <= cutoff_utc:
+            local_start = block.start_utc.astimezone(CORDOBA_TZ)
+            events.append({
+                "date": local_start.strftime("%Y-%m-%d"),
+                "title": block.title,
+                "time": local_start.strftime("%H:%M"),
+                "category": block.category.value,
+                "type": "block",
+                "id": block.id,
+                "completed": False,
+            })
+
+    # Recordatorios (bloques con categoría RECORDATORIO)
+    from .database import list_upcoming_blocks
+    reminders = await list_upcoming_blocks(session_id, limit=100)
+    for r in reminders:
+        if r.category.value == "recordatorio" and r.start_utc <= cutoff_utc:
+            local_start = r.start_utc.astimezone(CORDOBA_TZ)
+            events.append({
+                "date": local_start.strftime("%Y-%m-%d"),
+                "title": r.title,
+                "time": local_start.strftime("%H:%M"),
+                "category": "recordatorio",
+                "type": "reminder",
+                "id": r.id,
+                "completed": False,
+            })
+
+    # Cumpleaños/eventos de memories
+    from .database import get_upcoming_memory_events
+    memories = await get_upcoming_memory_events(session_id, days_ahead=30)
+    for mem in memories:
+        if mem.event_date:
+            try:
+                event_dt = datetime.strptime(mem.event_date, "%Y-%m-%d")
+                if now_utc.date() <= event_dt.date() <= cutoff_utc.date():
+                    events.append({
+                        "date": mem.event_date,
+                        "title": mem.fact_value,
+                        "time": "09:00",
+                        "category": "recordatorio",
+                        "type": "birthday",
+                        "id": mem.id,
+                        "completed": False,
+                    })
+            except Exception:
+                pass
+
+    # Ordenar por fecha y hora
+    events.sort(key=lambda e: (e["date"], e["time"]))
+    return events
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Helpers: Problem Details (RFC 9457)
 # ──────────────────────────────────────────────────────────────────────
 
@@ -392,6 +499,9 @@ async def get_session_state(
         if not last_assistant or last_assistant["content"] != greeting["text"]:
             await create_message(session_id, "assistant", greeting["text"], None)
 
+    # Calendar: próximos 30 días unificados
+    calendar = await build_calendar_events(session_id)
+
     return {
         "session": session_data.model_dump() if hasattr(session_data, "model_dump") else session_data,
         "tasks": [t.model_dump() for t in state["tasks"]],
@@ -404,6 +514,7 @@ async def get_session_state(
         "greeting": greeting,
         "display_name": display_name,
         "memory_days": 30,
+        "calendar": calendar,
     }
 
 

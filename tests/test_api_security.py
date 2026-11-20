@@ -28,8 +28,8 @@ async def client():
     os.environ["REDIS_URL"] = ""
     os.environ["GEMINI_API_KEY"] = ""
     os.environ["DEMO_ENABLED"] = "false"
-    # Rate limit alto para tests (ventana 120s para que quepan 1005 reqs secuenciales)
-    os.environ["RATE_LIMIT_REQUESTS"] = "1000"
+    # Rate limit bajo para tests rápidos (10 reqs por 120s)
+    os.environ["RATE_LIMIT_REQUESTS"] = "10"
     os.environ["RATE_LIMIT_WINDOW_SECONDS"] = "120"
 
     import importlib
@@ -175,19 +175,19 @@ class TestRateLimiting:
 
     async def test_rate_limit_blocks_over_limit(self, client):
         """Exceder el límite debe devolver 429."""
-        # Hacer 1005 peticiones rápidas (límite configurado en 1000 para tests)
+        # Hacer 15 peticiones rápidas (límite configurado en 10 para tests)
         blocked = False
-        for i in range(1005):
+        for i in range(15):
             resp = await client.get("/api/v1/session")
             if resp.status_code == 429:
                 blocked = True
                 break
-        assert blocked, "Rate limiting no bloqueó después de 1000 requests"
+        assert blocked, "Rate limiting no bloqueó después de 10 requests"
 
     async def test_rate_limit_returns_problem_details(self, client):
         """429 debe usar formato Problem Details (RFC 9457)."""
         # Agotar límite
-        for _ in range(1005):
+        for _ in range(15):
             resp = await client.get("/api/v1/session")
             if resp.status_code == 429:
                 error = resp.json()

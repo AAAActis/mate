@@ -386,3 +386,65 @@ class TestAssistantV2:
                 assert data["is_degraded"] is True
                 # El fallback debería haber creado la tarea
                 assert "tarea" in data["reply"].lower() or "creada" in data["reply"].lower() or "anotada" in data["reply"].lower()
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Test 11: Integración - LLM returns 2 functionCalls then text
+    # ──────────────────────────────────────────────────────────────────────
+
+    async def test_llm_multiple_function_calls_then_text(self, client: AsyncClient, session_a):
+        """Mock LLM returning 2 functionCalls then text, verify final reply is that text and is_degraded=false."""
+        transport = ASGITransport(app=client._transport.app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            from mate_api.agent import LLMClient, LLMResponse, ToolCall, _agent_cache, get_agent
+            from mate_api.config import Settings
+
+            # Create a mock settings object with API key enabled
+            mock_settings = Settings(
+                GEMINI_API_KEY="test-key",
+                DEMO_ENABLED="true",
+                GEMINI_MODEL="gemini-flash-lite-latest",
+                GEMINI_TIMEOUT_S=30,
+            )
+
+            call_count = {"count": 0}
+
+            async def mock_chat_multi(self, messages, tools, tool_choice="auto"):
+                call_count["count"] += 1
+                if call_count["count"] == 1:
+                    # First call: return 2 functionCalls
+                    return LLMResponse(
+                        content=None,
+                        tool_calls=[
+                            ToolCall(id="call_1", name="crear_tarea", arguments={"titulo": "Tarea 1", "hora_sugerida": "10:00"}),
+                            ToolCall(id="call_2", name="crear_tarea", arguments={"titulo": "Tarea 2", "hora_sugerida": "11:00"}),
+                        ]
+                    )
+                elif call_count["count"] == 2:
+                    # Second call: return text response
+                    return LLMResponse(content="Listo, creé las dos tareas para ti.", tool_calls=[])
+                else:
+                    return LLMResponse(content="Done")
+
+            # Patch both the LLMClient.chat and the get_settings used by agent
+            with patch.object(LLMClient, 'chat', mock_chat_multi), \
+                 patch('mate_api.agent.get_settings', return_value=mock_settings):
+                # Clear agent cache AFTER patching to force new agent creation with mocked LLM
+                _agent_cache.clear()
+
+                # Use message that matches fallback keywords for crear_tarea
+                resp = await ac.post(
+                    "/api/v1/chat",
+                    json={"message": "crear tarea Tarea 1 a las 10 y crear tarea Tarea 2 a las 11"},
+                    cookies={"mate_sid": session_a},
+                )
+                assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+                data = resp.json()
+                # Verify final reply is the text from second LLM call
+                assert data["reply"] == "Listo, creé las dos tareas para ti."
+                # Verify not degraded
+                assert data["is_degraded"] is False
+                # Verify tools were executed
+                assert len(data["tools_executed"]) == 2
+                assert all(t["success"] for t in data["tools_executed"])
+                assert data["tools_executed"][0]["name"] == "crear_tarea"
+                assert data["tools_executed"][1]["name"] == "crear_tarea"

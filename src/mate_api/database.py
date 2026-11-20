@@ -96,6 +96,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     session_id TEXT NOT NULL,
     title TEXT NOT NULL,
     due_time TEXT,
+    due_date TEXT,
+    category TEXT,
     completed INTEGER NOT NULL DEFAULT 0,
     created_at_utc TEXT NOT NULL,
     FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
@@ -143,6 +145,13 @@ CREATE INDEX IF NOT EXISTS idx_memories_session ON memories(session_id);
 async def init_db() -> None:
     async with db_transaction() as conn:
         await conn.executescript(SCHEMA_SQL)
+        # Idempotent migrations for new columns - check if columns exist first
+        cursor = await conn.execute("PRAGMA table_info(tasks)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "due_date" not in columns:
+            await conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
+        if "category" not in columns:
+            await conn.execute("ALTER TABLE tasks ADD COLUMN category TEXT")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -289,15 +298,15 @@ async def get_session_by_ics_token(ics_token: str) -> Optional[SessionRead]:
 # Tasks — TODAS las queries filtran por session_id (BOLA prevention)
 # ──────────────────────────────────────────────────────────────────────
 
-async def create_task(session_id: str, title: str, due_time: Optional[str] = None) -> TaskRead:
+async def create_task(session_id: str, title: str, due_time: Optional[str] = None, due_date: Optional[str] = None, category: Optional[str] = None) -> TaskRead:
     now = utc_now_iso()
     async with db_transaction() as conn:
         cur = await conn.execute(
             """
-            INSERT INTO tasks (session_id, title, due_time, completed, created_at_utc)
-            VALUES (?, ?, ?, 0, ?)
+            INSERT INTO tasks (session_id, title, due_time, due_date, category, completed, created_at_utc)
+            VALUES (?, ?, ?, ?, ?, 0, ?)
             """,
-            (session_id, title, due_time, now),
+            (session_id, title, due_time, due_date, category, now),
         )
         task_id = cur.lastrowid
     return TaskRead(
@@ -305,21 +314,23 @@ async def create_task(session_id: str, title: str, due_time: Optional[str] = Non
         session_id=session_id,
         title=title,
         due_time=due_time,
+        due_date=due_date,
+        category=Category(category) if category else None,
         completed=False,
         created_at_utc=parse_utc(now),
     )
 
 
 async def list_tasks_today(session_id: str, args: dict = None) -> list[TaskRead]:
-    today_iso = (args or {}).get("today_iso") or datetime.now().strftime("%Y-%m-%d")
+    today_iso = (args or {}).get("today_iso") or datetime.now(CORDOBA_TZ).strftime("%Y-%m-%d")
     async with get_connection() as conn:
         rows = await conn.execute(
             """
             SELECT * FROM tasks
-            WHERE session_id = ? AND (due_time IS NULL OR due_time <= '23:59')
+            WHERE session_id = ? AND (due_date IS NULL OR due_date = ?)
             ORDER BY due_time IS NULL, due_time
             """,
-            (session_id,),
+            (session_id, today_iso),
         )
         rows = await rows.fetchall()
     return [
@@ -328,6 +339,8 @@ async def list_tasks_today(session_id: str, args: dict = None) -> list[TaskRead]
             session_id=row["session_id"],
             title=row["title"],
             due_time=row["due_time"],
+            due_date=row["due_date"],
+            category=Category(row["category"]) if row["category"] else None,
             completed=bool(row["completed"]),
             created_at_utc=parse_utc(row["created_at_utc"]),
         )
@@ -356,6 +369,8 @@ async def get_task(session_id: str, task_id: int) -> Optional[TaskRead]:
             session_id=row["session_id"],
             title=row["title"],
             due_time=row["due_time"],
+            due_date=row["due_date"],
+            category=Category(row["category"]) if row["category"] else None,
             completed=bool(row["completed"]),
             created_at_utc=parse_utc(row["created_at_utc"]),
         )
@@ -753,6 +768,9 @@ async def list_active_sessions(conn) -> list[SessionRead]:
             tone=Tone(row["tone"]),
             created_at_utc=parse_utc(row["created_at_utc"]),
             expires_at_utc=parse_utc(row["expires_at_utc"]),
+            last_seen_utc=parse_utc(row["last_seen_utc"]) if row["last_seen_utc"] else None,
+            display_name=row["display_name"],
+            messages_count_today=row["messages_count_today"],
         )
         for row in rows
     ]

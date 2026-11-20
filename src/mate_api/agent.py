@@ -11,6 +11,7 @@ import logging
 import httpx
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any, Literal
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -711,7 +712,8 @@ class MateAgent:
                     "parts": model_parts
                 })
 
-                # Ejecutar tool calls
+                # Ejecutar tool calls - recolectar todos los functionResponse para un solo mensaje
+                function_responses = []
                 for tc in resp.tool_calls:
                     if self.tool_calls_this_turn >= MAX_TOOL_CALLS_PER_TURN:
                         logger.warning("Límite de 4 tool calls alcanzado")
@@ -728,20 +730,33 @@ class MateAgent:
                         tools_executed.append(ModelToolResult(name=tc.name, success=result.success, result=result.data))
                         self.tool_calls_this_turn += 1
 
-                        # Añadir resultado al historial para siguiente iteración
-                        # En native API, functionResponse va como role "user" con parts
-                        messages.append({
-                            "role": "user",
-                            "parts": [{
-                                "functionResponse": {
-                                    "name": tc.name,
-                                    "response": result.data if result.success else {"error": result.error}
-                                }
-                            }]
+                        # Preparar functionResponse - convertir datetimes a ISO
+                        response_data = result.data if result.success else {"error": result.error}
+                        # Hacer JSON-serializable (convertir datetime, etc.)
+                        response_data = self._make_json_serializable(response_data)
+
+                        function_responses.append({
+                            "functionResponse": {
+                                "name": tc.name,
+                                "response": response_data
+                            }
                         })
                     except Exception as e:
                         logger.exception(f"Error ejecutando {tc.name}")
                         tools_executed.append(ModelToolResult(name=tc.name, success=False, result={"error": str(e)}))
+                        function_responses.append({
+                            "functionResponse": {
+                                "name": tc.name,
+                                "response": {"error": str(e)}
+                            }
+                        })
+
+                # Añadir TODOS los functionResponse en UN solo mensaje (mismo orden que functionCall)
+                if function_responses:
+                    messages.append({
+                        "role": "user",
+                        "parts": function_responses
+                    })
 
             else:
                 # Sin content ni tool_calls
@@ -763,6 +778,38 @@ class MateAgent:
                 if final_content:
                     break
 
+        # Si no hay respuesta final pero se ejecutaron tools, armar respuesta con lo que se hizo
+        if not final_content and tools_executed:
+            done_items = []
+            for t in tools_executed:
+                if t.success and t.result:
+                    if t.name == "crear_tarea":
+                        title = t.result.get("title", "tarea")
+                        due = t.result.get("due_time", "")
+                        due_date = t.result.get("due_date", "")
+                        cat = t.result.get("category", "")
+                        parts = [title]
+                        if due_date:
+                            parts.append(f"para el {due_date}")
+                        if due:
+                            parts.append(f"a las {due}")
+                        if cat:
+                            parts.append(f"[{cat}]")
+                        done_items.append(" ".join(parts))
+                    elif t.name == "reservar_bloque":
+                        title = t.result.get("title", "bloque")
+                        start = t.result.get("start_utc", "")
+                        if start:
+                            from datetime import datetime
+                            dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+                            parts.append(f"{title} a las {dt.strftime('%H:%M')}")
+                        else:
+                            parts.append(title)
+            if done_items:
+                final_content = "Listo, anoté: " + ", ".join(done_items) + "."
+            else:
+                final_content = "Listo. ¿Algo más?"
+
         if not final_content:
             final_content = "Listo. ¿Algo más?"
 
@@ -780,6 +827,22 @@ class MateAgent:
             state_snapshot={},
             is_degraded=False,
         )
+
+    def _make_json_serializable(self, obj: Any) -> Any:
+        """Convierte objetos a tipos JSON-serializables (datetime -> ISO, etc.)."""
+        if obj is None or isinstance(obj, (str, int, float, bool)):
+            return obj
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, dict):
+            return {k: self._make_json_serializable(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self._make_json_serializable(item) for item in obj]
+        if hasattr(obj, "model_dump"):
+            return self._make_json_serializable(obj.model_dump())
+        if hasattr(obj, "__dict__"):
+            return self._make_json_serializable(obj.__dict__)
+        return str(obj)
 
 
 # ──────────────────────────────────────────────────────────────────────

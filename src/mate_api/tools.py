@@ -73,10 +73,16 @@ class CrearRecordatorioResult(BaseModel):
 # ──────────────────────────────────────────────────────────────────────
 
 async def tool_crear_tarea(session_id: str, args: dict) -> ToolResult:
-    """1. Crear una tarea para hoy."""
+    """1. Crear una tarea con título, hora opcional (HH:MM), fecha opcional (YYYY-MM-DD) y categoría opcional."""
     try:
         validated = CrearTareaArgs(**args)
-        task = await create_task(session_id, validated.titulo, validated.hora_sugerida)
+        task = await create_task(
+            session_id,
+            validated.titulo,
+            validated.hora_sugerida,
+            validated.fecha_sugerida,
+            validated.categoria.value if validated.categoria else None,
+        )
         return ToolResult(success=True, data=task.model_dump())
     except Exception as e:
         return ToolResult(success=False, error=str(e))
