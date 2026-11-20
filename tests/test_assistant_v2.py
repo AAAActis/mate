@@ -300,21 +300,26 @@ class TestAssistantV2:
                 llm = LLMClientClass()
                 llm.api_key = "test-key"
 
-                # Verificar que _clean_schema quita campos no deseados
+                # Verificar que to_gemini_schema quita campos no deseados y resuelve $ref
+                from mate_api.agent import to_gemini_schema
                 test_schema = {
                     "type": "object",
                     "title": "Test",
                     "additionalProperties": False,
-                    "$defs": {},
+                    "$defs": {"Name": {"type": "string", "description": "A name"}},
                     "default": "x",
-                    "properties": {"name": {"type": "string"}}
+                    "properties": {
+                        "name": {"$ref": "#/$defs/Name"}
+                    }
                 }
-                cleaned = llm._clean_schema(test_schema)
+                cleaned = to_gemini_schema(test_schema)
                 assert "title" not in cleaned
                 assert "additionalProperties" not in cleaned
                 assert "$defs" not in cleaned
                 assert "default" not in cleaned
                 assert "properties" in cleaned
+                assert cleaned["properties"]["name"]["type"] == "string"
+                assert cleaned["properties"]["name"]["description"] == "A name"
 
     # ──────────────────────────────────────────────────────────────────────
     # Test 9: Error 403 de Gemini termina en is_degraded=true sin 500

@@ -35,6 +35,50 @@ from .database import get_session
 
 logger = logging.getLogger(__name__)
 
+
+def to_gemini_schema(schema: dict) -> dict:
+    """Convierte un JSON Schema (con $ref/$defs) al formato que acepta Gemini.
+    - Resuelve $ref apuntando a $defs
+    - Convierte anyOf con null a nullable: true
+    - Filtra solo campos permitidos por Gemini
+    """
+    defs = schema.get("$defs", {})
+    ALLOWED = {"type", "description", "enum", "properties", "required", "items", "nullable", "format"}
+
+    def resolve(node):
+        if isinstance(node, list):
+            return [resolve(n) for n in node]
+        if not isinstance(node, dict):
+            return node
+        if "$ref" in node:
+            name = node["$ref"].split("/")[-1]
+            merged = {**defs.get(name, {}), **{k: v for k, v in node.items() if k != "$ref"}}
+            return resolve(merged)
+        if "anyOf" in node:
+            options = [o for o in node["anyOf"] if o.get("type") != "null"]
+            base = resolve(options[0]) if options else {"type": "string"}
+            if len(options) < len(node["anyOf"]):
+                base["nullable"] = True
+            if "description" in node:
+                base["description"] = node["description"]
+            return base
+        if "const" in node:
+            node = {**node, "enum": [node["const"]]}
+        out = {}
+        for k, v in node.items():
+            if k not in ALLOWED:
+                continue
+            if k == "properties":
+                out[k] = {pk: resolve(pv) for pk, pv in v.items()}
+            elif k == "items":
+                out[k] = resolve(v)
+            else:
+                out[k] = v
+        return out
+
+    return resolve(schema)
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Configuración
 # ──────────────────────────────────────────────────────────────────────
@@ -99,30 +143,13 @@ class LLMClient:
         self.timeout = self.settings.GEMINI_TIMEOUT_S
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
 
-    def _clean_schema(self, schema: dict) -> dict:
-        """Limpia el schema JSON quitando campos que Gemini rechaza."""
-        if not isinstance(schema, dict):
-            return schema
-
-        cleaned = {}
-        for k, v in schema.items():
-            if k in ("title", "additionalProperties", "$defs", "default"):
-                continue
-            if isinstance(v, dict):
-                cleaned[k] = self._clean_schema(v)
-            elif isinstance(v, list):
-                cleaned[k] = [self._clean_schema(item) if isinstance(item, dict) else item for item in v]
-            else:
-                cleaned[k] = v
-        return cleaned
-
     def _build_tools(self) -> List[Dict[str, Any]]:
         """Convierte TOOL_DEFINITIONS al formato functionDeclarations de Gemini."""
         function_declarations = []
         for tool_def in TOOL_DEFINITIONS:
             func = tool_def["function"]
-            # El schema ya viene de Pydantic model_json_schema()
-            schema = self._clean_schema(func["parameters"])
+            # El schema ya viene de Pydantic model_json_schema() - convertir a formato Gemini
+            schema = to_gemini_schema(func["parameters"])
             function_declarations.append({
                 "name": func["name"],
                 "description": func["description"],
