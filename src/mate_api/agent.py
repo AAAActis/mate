@@ -129,6 +129,7 @@ class LLMResponse:
     content: Optional[str] = None
     tool_calls: List[ToolCall] = None
     error: Optional[str] = None
+    raw_parts: Optional[list] = None
 
     def __post_init__(self):
         if self.tool_calls is None:
@@ -265,7 +266,7 @@ class LLMClient:
                         arguments=fc.get("args", {}),
                     ))
 
-            return LLMResponse(
+            return LLMResponse(raw_parts=parts, 
                 content="".join(text_parts) if text_parts else None,
                 tool_calls=tool_calls,
             )
@@ -765,6 +766,8 @@ class MateAgent:
                         }
                     })
 
+                if getattr(resp, "raw_parts", None):
+                    model_parts = resp.raw_parts
                 # Agregar el mensaje del modelo TAL CUAL (incluye thoughtSignature si viniera)
                 messages.append({
                     "role": "model",
