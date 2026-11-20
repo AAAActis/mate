@@ -201,7 +201,7 @@ async def rate_limit_middleware(request: Request, call_next):
 
     limiter = await get_rate_limiter()
     allowed, remaining = await limiter.check(ip)
-    print(f"[RATE LIMIT] IP: {ip}, allowed: {allowed}, remaining: {remaining}, store len: {len(limiter._store.get(ip, []))}")
+    logger.debug(f"Rate limit: IP={ip} allowed={allowed} remaining={remaining}")
     retry_after = 60  # default fallback
 
     if not allowed:

@@ -61,7 +61,7 @@ function mostrarChips(herramientas) {
   for (const [name, count] of Object.entries(counts)) {
     const chip = document.createElement('span');
     chip.className = 'globo-chip';
-    chip.textContent = displayNames[name] || name + (count > 1 ? ` ×${count}` : '');
+    chip.textContent = displayNames[name] + (count > 1 ? ` ×${count}` : '');
     cont.appendChild(chip);
   }
 }
@@ -296,6 +296,16 @@ function pintarSesion() {
     marcarTono(sesion.tone);
     $('contador-cuota').textContent = String(sesion.session?.messages_count_today ?? 0);
     if (sesion.greeting) decirSaludo(sesion.greeting.text, sesion.greeting.avatar_state);
+
+    // Sidebar agenda summary: "X cosas hoy · Y mañana"
+    const resumenEl = $('resumen-agenda');
+    if (resumenEl && sesion.calendar) {
+      const today = todayKeyCordoba();
+      const tomorrow = formatDateKey(new Date(parseDateLocal(today).getTime() + 86400000));
+      const todayCount = sesion.calendar.filter(e => e.date === today).length;
+      const tomorrowCount = sesion.calendar.filter(e => e.date === tomorrow).length;
+      resumenEl.textContent = `${todayCount} cosa${todayCount !== 1 ? 's' : ''} hoy · ${tomorrowCount} cosa${tomorrowCount !== 1 ? 's' : ''} mañana`;
+    }
 
     // Initialize calendar to current month in Córdoba (only first load)
     if (!calendarMonth) {

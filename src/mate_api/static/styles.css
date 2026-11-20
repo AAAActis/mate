@@ -276,9 +276,10 @@ body {
 .agenda { display: flex; flex-direction: column; gap: 12px; padding: 18px; min-height: 0; }
 .agenda-head { display: flex; align-items: center; justify-content: space-between; }
 .agenda-head h2 { font-size: 16px; }
+.agenda-resumen { font-size: 13px; color: var(--text-secondary); }
 
 /* ── Calendario mensual (zona-4) ────────────────────────────────────────────── */
-.calendario { display: flex; flex-direction: column; gap: 12px; }
+.calendario { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .calendario-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mes-titulo {
   font-family: var(--font-display);
@@ -301,16 +302,15 @@ body {
 }
 .calendario-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
 }
 .calendario-dia {
-  aspect-ratio: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 6px 4px 4px;
+  padding: 4px 2px;
   background: none;
   border: 2px solid transparent;
   border-radius: 12px;
@@ -320,7 +320,8 @@ body {
   cursor: pointer;
   transition: background 150ms var(--ease), border-color 150ms var(--ease), color 150ms var(--ease);
   position: relative;
-  min-height: 44px;
+  height: 32px;
+  min-height: 32px;
 }
 .calendario-dia:hover { background: var(--bg-accent-soft); }
 .calendario-dia.vacio { cursor: default; color: var(--text-muted); }
@@ -338,13 +339,17 @@ body {
   background: var(--yerba-olive);
   color: #fbf7ee;
 }
-.calendario-dia .dia-numero { z-index: 1; }
+.calendario-dia .dia-numero {
+  z-index: 1;
+  line-height: 1;
+}
 .calendario-dia .dia-eventos {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 2px;
   margin-top: 2px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .calendario-dia .evento-punto {
   width: 6px; height: 6px;
@@ -357,6 +362,7 @@ body {
   border-radius: 999px;
   background: var(--border-warm);
   width: 16px; height: 16px;
+  flex-shrink: 0;
 }
 
 /* ── Lista del día seleccionado ──────────────────────────────────────────────── */
@@ -367,6 +373,8 @@ body {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-warm);
 }
 .lista-dia { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; flex: 1; min-height: 0; }
 .item-dia {
