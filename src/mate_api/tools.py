@@ -85,13 +85,28 @@ async def tool_crear_tarea(session_id: str, args: dict) -> ToolResult:
     """1. Crear una tarea con título, hora opcional (HH:MM), fecha opcional (YYYY-MM-DD) y categoría opcional.
     Si ya existe una tarea con mismo título normalizado en la misma fecha, devuelve la existente.
     La hora se interpreta en zona horaria America/Argentina/Cordoba y se guarda en UTC.
-    La respuesta incluye la hora original local para mostrar al usuario."""
+    La respuesta incluye la hora original local para mostrar al usuario.
+    Si el texto original menciona "tarde" o "noche" y la hora es < 12, suma 12 horas (formato 24h)."""
     try:
         validated = CrearTareaArgs(**args)
 
         # Guardar hora local original para la respuesta
         original_due_time = validated.hora_sugerida
         original_due_date = validated.fecha_sugerida
+
+        # Inferir tarde/noche desde texto_original y ajustar hora si corresponde
+        if validated.hora_sugerida and validated.texto_original:
+            hour, minute = map(int, validated.hora_sugerida.split(":"))
+            texto = validated.texto_original.lower()
+            if ("tarde" in texto or "noche" in texto) and hour < 12:
+                hour += 12
+                validated.hora_sugerida = f"{hour:02d}:{minute:02d}"
+
+        # Validar hora final en rango 00:00-23:59
+        if validated.hora_sugerida:
+            hour, minute = map(int, validated.hora_sugerida.split(":"))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return ToolResult(success=False, error="Hora inválida: debe estar entre 00:00 y 23:59")
 
         # Verificar duplicado por título normalizado + fecha
         if validated.fecha_sugerida:
@@ -275,13 +290,28 @@ async def tool_crear_recordatorio(session_id: str, args: dict) -> ToolResult:
     """7. Crea un bloque tipo recordatorio y, si es evento especial, registra memoria para avisar 7 días antes.
     Si ya existe un recordatorio con mismo título normalizado en la misma fecha, devuelve el existente.
     La hora se interpreta en zona horaria America/Argentina/Cordoba y se guarda en UTC.
-    La respuesta incluye la hora original local para mostrar al usuario."""
+    La respuesta incluye la hora original local para mostrar al usuario.
+    Si el texto original menciona "tarde" o "noche" y la hora es < 12, suma 12 horas (formato 24h)."""
     try:
         validated = CrearRecordatorioArgs(**args)
 
         # Guardar hora local original para la respuesta
         original_hora = validated.hora
         original_fecha = validated.fecha_iso
+
+        # Inferir tarde/noche desde texto_original y ajustar hora si corresponde
+        if validated.hora and validated.texto_original:
+            hour, minute = map(int, validated.hora.split(":"))
+            texto = validated.texto_original.lower()
+            if ("tarde" in texto or "noche" in texto) and hour < 12:
+                hour += 12
+                validated.hora = f"{hour:02d}:{minute:02d}"
+
+        # Validar hora final en rango 00:00-23:59
+        if validated.hora:
+            hour, minute = map(int, validated.hora.split(":"))
+            if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                return ToolResult(success=False, error="Hora inválida: debe estar entre 00:00 y 23:59")
 
         # Verificar duplicado por título normalizado + fecha (en bloques tipo recordatorio)
         norm_title = _normalize_title(validated.titulo)

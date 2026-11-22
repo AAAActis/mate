@@ -4,14 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Mate</title>
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
   <link rel="stylesheet" href="/static/styles.css">
-<link rel="stylesheet" href="/static/mate.css">
+  <link rel="stylesheet" href="/static/mate.css">
+  <link rel="stylesheet" href="/static/globo.css">
 </head>
 <body>
   <!-- Barra superior solo en mobile (< 900px) -->
   <header class="mobile-bar">
-    <!-- Logo sidebar: clon dinámico de #mate (sin id, data-state="contento", 44px) -->
-<span id="sidebar-logo" class="logo-mini" aria-hidden="true"></span>
+    <!-- Logo sidebar: logo.svg 52px -->
+    <img id="sidebar-logo" class="logo-mini" src="/static/logo.svg" alt="" aria-hidden="true" width="52" height="52">
     <button id="btn-menu" class="icon-btn" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
       <svg class="icon" viewBox="0 0 20 20"><path d="M3 5h14M3 10h14M3 15h14"/></svg>
     </button>
@@ -20,7 +22,7 @@
 
   <aside id="sidebar" class="sidebar">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
+      <img class="brand-mark" src="/static/logo.svg" alt="" aria-hidden="true" width="40" height="40">
       <div>
         <h1 class="brand-title">Mate</h1>
         <p class="brand-sub">Tu asistente, siempre con vos</p>
@@ -49,14 +51,10 @@
         <span id="perfil-inicial" class="avatar" aria-hidden="true">·</span>
         <span id="perfil-nombre">Vos</span>
       </div>
-      <div class="tonos" role="group" aria-label="Tono de Mate">
-        <button class="tono" data-tono="amable" aria-pressed="true">Amable</button>
-        <button class="tono" data-tono="firme" aria-pressed="false">Firme</button>
-      </div>
-      <div class="tono-modo" role="group" aria-label="Modo de tono">
-        <button class="tono-modo-btn" data-modo="automatico" aria-pressed="true" title="Automático: Mate elige el tono según contexto">Auto</button>
-        <button class="tono-modo-btn" data-modo="amable" aria-pressed="false" title="Forzar tono amable">😊</button>
-        <button class="tono-modo-btn" data-modo="firme" aria-pressed="false" title="Forzar tono firme">😐</button>
+      <div class="tono-selector" role="group" aria-label="Tono de Mate">
+        <button class="tono-btn" data-tono="automatico" aria-pressed="true" title="Automático: Mate elige el tono según contexto">Auto</button>
+        <button class="tono-btn" data-tono="amable" aria-pressed="false" title="Tono amable">Amable</button>
+        <button class="tono-btn" data-tono="firme" aria-pressed="false" title="Tono firme">Firme</button>
       </div>
       <span id="tono-detectado" class="tono-detectado" hidden></span>
     </footer>
@@ -176,10 +174,11 @@
 </svg>
 
         <div id="globo" class="globo" aria-live="polite">
-          <p id="globo-texto" class="globo-texto-corto"></p>
-          <p id="globo-texto-largo" class="globo-texto-largo hidden"></p>
-          <button class="copiar-btn" hidden>Copiar</button>
-          <p class="globo-texto-user" hidden></p>
+          <svg class="globo-hoja" viewBox="0 0 38 26" aria-hidden="true">
+            <path d="M2 18 C8 4 26 0 36 6 C30 20 14 26 2 18 Z" fill="#6a8a3a" stroke="#3a2e24" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M5 17 Q18 10 33 7" fill="none" stroke="#4e6a28" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <p id="globo-texto" class="globo-texto"></p>
         </div>
       </section>
 
@@ -263,6 +262,15 @@
     </div>
     <div class="globo-chips" aria-label="Herramientas ejecutadas"></div>
     <form method="dialog"><button class="btn">Cerrar</button></form>
+  </dialog>
+
+  <dialog id="dialog-nombre" class="dialog-nombre">
+    <h2>¡Hola! ¿Cómo te llamás?</h2>
+    <input type="text" id="input-nombre" placeholder="Tu nombre" maxlength="60" autocomplete="name">
+    <div class="dialog-acciones">
+      <button id="btn-nombre-ok" class="btn btn-primary">Listo</button>
+    </div>
+    <p class="skip-link"><a id="btn-nombre-skip" href="#">Prefiero no decirlo</a></p>
   </dialog>
 
   <dialog id="dialog-ics">

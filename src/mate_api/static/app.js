@@ -288,7 +288,13 @@ async function cargarSesion() {
   const resp = await fetch('/api/v1/session', { credentials: 'same-origin' });
   if (!resp.ok) throw new Error(`GET /session ${resp.status}`);
   sesion = await resp.json();
-  pintarSesion();
+
+  // Mostrar dialog de nombre si no hay display_name y no se salteó
+  if (!sesion.display_name && !sesion.profile_skipped) {
+    mostrarDialogNombre();
+  } else {
+    pintarSesion();
+  }
 }
 
 function pintarSesion() {
@@ -296,7 +302,7 @@ function pintarSesion() {
     const nombre = sesion.display_name || 'Vos';
     $('perfil-nombre').textContent = nombre;
     $('perfil-inicial').textContent = nombre.charAt(0).toUpperCase();
-    marcarTono(sesion.tone);
+    marcarTono(sesion.tone_mode || sesion.tone); // tone_mode puede ser 'automatico', 'amable', 'firme'
     $('contador-cuota').textContent = String(sesion.session?.messages_count_today ?? 0);
     // Saludo solo en la primera carga de la página (no al recargar tras un mensaje)
     if (sesion.greeting && !pintarSesion.ya) {
@@ -327,6 +333,75 @@ function pintarSesion() {
     console.error('pintarSesion error:', e);
   }
 }
+
+// ── Dialog Nombre ──────────────────────────────────────────────────────────────
+function mostrarDialogNombre() {
+  const dialog = $('dialog-nombre');
+  if (!dialog) return;
+  dialog.showModal();
+  const input = $('input-nombre');
+  if (input) {
+    input.focus();
+    input.value = '';
+  }
+}
+
+async function guardarNombre(nombre) {
+  const resp = await fetch('/api/v1/profile', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nombre.trim() }),
+  });
+  if (!resp.ok) throw new Error('Error guardando nombre');
+  // Recargar sesión para obtener display_name actualizado
+  await cargarSesion();
+}
+
+async function saltarNombre() {
+  const resp = await fetch('/api/v1/profile', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ skip: true }),
+  });
+  if (!resp.ok) throw new Error('Error saltando nombre');
+  await cargarSesion();
+}
+
+// Event listeners para dialog nombre
+document.addEventListener('DOMContentLoaded', () => {
+  const btnOk = $('btn-nombre-ok');
+  const btnSkip = $('btn-nombre-skip');
+  const input = $('input-nombre');
+  const dialog = $('dialog-nombre');
+
+  if (btnOk) {
+    btnOk.addEventListener('click', async () => {
+      const nombre = input?.value?.trim();
+      if (nombre) {
+        dialog.close();
+        await guardarNombre(nombre);
+      }
+    });
+  }
+  if (btnSkip) {
+    btnSkip.addEventListener('click', async (e) => {
+      e.preventDefault();
+      dialog.close();
+      await saltarNombre();
+    });
+  }
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const nombre = input.value.trim();
+        if (nombre) {
+          dialog.close();
+          guardarNombre(nombre);
+        }
+      }
+    });
+  }
+});
 
 function pintarAgenda() {
   try {
@@ -395,28 +470,15 @@ async function completar(tipo, id) {
 
 // ── Tono ─────────────────────────────────────────────────────────────────────
 function marcarTono(tono) {
-  document.querySelectorAll('.tono').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tono === tono)));
+  document.querySelectorAll('.tono-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tono === tono)));
 }
-document.querySelectorAll('.tono').forEach((b) => b.addEventListener('click', async () => {
-  const resp = await fetch('/api/v1/tone', {
-    method: 'POST', credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tone: b.dataset.tono }),
-  });
-  if (resp.ok) marcarTono((await resp.json()).tone);
-}));
-
-// ── Tono Mode (Automático/Amable/Firme) ─────────────────────────────────────
-function marcarTonoModo(modo) {
-  document.querySelectorAll('.tono-modo-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.modo === modo)));
-}
-document.querySelectorAll('.tono-modo-btn').forEach((b) => b.addEventListener('click', async () => {
+document.querySelectorAll('.tono-btn').forEach((b) => b.addEventListener('click', async () => {
   const resp = await fetch('/api/v1/tone/mode', {
     method: 'POST', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tone_mode: b.dataset.modo }),
+    body: JSON.stringify({ tone_mode: b.dataset.tono }),
   });
-  if (resp.ok) marcarTonoModo((await resp.json()).tone_mode);
+  if (resp.ok) marcarTono((await resp.json()).tone_mode);
 }));
 
 function mostrarTonoDetectado(tono) {
@@ -622,12 +684,18 @@ function decir(texto) {
   const t = String(texto == null ? "" : texto);
   const largo = t.length > 90;
   const globo = document.getElementById("globo");
-  const corto = document.getElementById("globo-texto");
-  const lar = document.getElementById("globo-texto-largo");
-  if (globo) globo.classList.toggle("largo", largo);
-  if (corto) { corto.textContent = largo ? "" : t; corto.hidden = largo; }
-  if (lar) { lar.textContent = largo ? t : ""; lar.hidden = !largo; }
-  if (!corto && !lar && globo) globo.textContent = t;
+  const textoEl = document.getElementById("globo-texto");
+  if (!globo || !textoEl) return;
+
+  // Animación de entrada
+  globo.classList.remove("entra");
+  void globo.offsetWidth; // force reflow
+  globo.classList.add("entra");
+
+  // Clase largo para textos > 90 chars
+  globo.classList.toggle("largo", largo);
+  textoEl.textContent = t;
+
   const mate = document.getElementById("mate");
   if (!mate) return;
   mate.setAttribute("data-state", "hablando");

@@ -37,6 +37,8 @@ from .models import (
     HealthResponse,
     CompleteItemRequest,
     CompleteItemResponse,
+    ProfileRequest,
+    ProfileResponse,
 )
 from .database import (
     init_db,
@@ -46,6 +48,7 @@ from .database import (
     get_full_session_state,
     update_session_tone,
     update_session_tone_mode,
+    update_session_profile,
     rotate_ics_token,
     delete_session,
     purge_expired_sessions,
@@ -690,6 +693,32 @@ async def set_tone_mode(
     if not ok:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
     return {"tone_mode": tone_mode_req.tone_mode.value}
+
+
+@app.post("/api/v1/profile", response_model=ProfileResponse)
+async def update_profile(
+    request: Request,
+    response: Response,
+    profile_req: ProfileRequest,
+    session_id: str = Depends(get_or_create_session_id),
+):
+    """Actualiza el perfil del usuario (display_name) o marca profile_skipped."""
+    if profile_req.name is not None:
+        ok = await update_session_profile(session_id, display_name=profile_req.name.strip())
+    elif profile_req.skip:
+        ok = await update_session_profile(session_id, profile_skipped=True)
+    else:
+        return ProfileResponse(display_name=None, profile_skipped=False)
+
+    if not ok:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+
+    # Leer sesión actualizada para devolver display_name y profile_skipped
+    session = await get_session(session_id)
+    return ProfileResponse(
+        display_name=session.display_name if session else None,
+        profile_skipped=session.profile_skipped if session else False,
+    )
 
 
 @app.post("/api/v1/items/{item_type}/{item_id}/complete")

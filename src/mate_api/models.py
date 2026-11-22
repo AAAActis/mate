@@ -50,6 +50,7 @@ class SessionCreate(SessionBase):
 class SessionRead(SessionBase):
     last_seen_utc: Optional[datetime] = None
     display_name: Optional[str] = None
+    profile_skipped: bool = False
     messages_count_today: int = 0
 
 
@@ -134,6 +135,7 @@ class CrearTareaArgs(ToolArguments):
     hora_sugerida: Optional[str] = Field(default=None, pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$")
     fecha_sugerida: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     categoria: Optional[Category] = None
+    texto_original: Optional[str] = None  # Texto original del usuario para inferir tarde/noche
 
 
 class ListarHoyArgs(ToolArguments):
@@ -174,6 +176,7 @@ class CrearRecordatorioArgs(ToolArguments):
     titulo: TitleStr
     fecha_iso: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     hora: str = Field(default="09:00", pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$")
+    texto_original: Optional[str] = None  # Texto original del usuario para inferir tarde/noche
 
 
 class GuardarDatoArgs(ToolArguments):
@@ -263,6 +266,16 @@ class CompleteItemResponse(BaseModel):
     completed: bool
     message: str
     avatar_state: AvatarState
+
+
+class ProfileRequest(BaseModel):
+    name: Optional[str] = None
+    skip: bool = False
+
+
+class ProfileResponse(BaseModel):
+    display_name: Optional[str] = None
+    profile_skipped: bool = False
 
 
 class RevokeTokenResponse(BaseModel):

@@ -72,10 +72,12 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     ics_token TEXT NOT NULL UNIQUE,
     tone TEXT NOT NULL DEFAULT 'amable',
+    tone_mode TEXT NOT NULL DEFAULT 'automatico',
     created_at_utc TEXT NOT NULL,
     expires_at_utc TEXT NOT NULL,
     last_seen_utc TEXT NOT NULL DEFAULT '',
     display_name TEXT NULL,
+    profile_skipped INTEGER NOT NULL DEFAULT 0,
     messages_count_today INTEGER NOT NULL DEFAULT 0
 );
 
@@ -169,6 +171,8 @@ async def init_db() -> None:
         columns = [row[1] for row in await cursor.fetchall()]
         if "tone_mode" not in columns:
             await conn.execute("ALTER TABLE sessions ADD COLUMN tone_mode TEXT NOT NULL DEFAULT 'automatico'")
+        if "profile_skipped" not in columns:
+            await conn.execute("ALTER TABLE sessions ADD COLUMN profile_skipped INTEGER NOT NULL DEFAULT 0")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -198,10 +202,10 @@ async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMAB
     async with db_transaction() as conn:
         await conn.execute(
             """
-            INSERT INTO sessions (session_id, ics_token, tone, tone_mode, created_at_utc, expires_at_utc, last_seen_utc, display_name, messages_count_today)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, ics_token, tone, tone_mode, created_at_utc, expires_at_utc, last_seen_utc, display_name, profile_skipped, messages_count_today)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, ics_token, tone.value, tone_mode.value, now, expires, now, None, 0),
+            (session_id, ics_token, tone.value, tone_mode.value, now, expires, now, None, 0, 0),
         )
     return SessionRead(
         session_id=session_id,
@@ -212,6 +216,7 @@ async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMAB
         expires_at_utc=parse_utc(expires),
         last_seen_utc=parse_utc(now),
         display_name=None,
+        profile_skipped=False,
         messages_count_today=0,
     )
 
@@ -233,6 +238,7 @@ async def get_session(session_id: str) -> Optional[SessionRead]:
             expires_at_utc=parse_utc(row["expires_at_utc"]),
             last_seen_utc=parse_utc(row["last_seen_utc"]) if row["last_seen_utc"] else None,
             display_name=row["display_name"],
+            profile_skipped=bool(row["profile_skipped"]) if "profile_skipped" in row.keys() else False,
             messages_count_today=row["messages_count_today"],
         )
 
@@ -250,6 +256,28 @@ async def update_session_tone_mode(session_id: str, tone_mode: Tone) -> bool:
         cur = await conn.execute(
             "UPDATE sessions SET tone_mode = ? WHERE session_id = ?", (tone_mode.value, session_id)
         )
+        return cur.rowcount > 0
+
+
+async def update_session_profile(session_id: str, display_name: Optional[str] = None, profile_skipped: Optional[bool] = None) -> bool:
+    async with db_transaction() as conn:
+        if display_name is not None and profile_skipped is not None:
+            cur = await conn.execute(
+                "UPDATE sessions SET display_name = ?, profile_skipped = ? WHERE session_id = ?",
+                (display_name, int(profile_skipped), session_id)
+            )
+        elif display_name is not None:
+            cur = await conn.execute(
+                "UPDATE sessions SET display_name = ? WHERE session_id = ?",
+                (display_name, session_id)
+            )
+        elif profile_skipped is not None:
+            cur = await conn.execute(
+                "UPDATE sessions SET profile_skipped = ? WHERE session_id = ?",
+                (int(profile_skipped), session_id)
+            )
+        else:
+            return False
         return cur.rowcount > 0
 
 
@@ -318,6 +346,7 @@ async def get_session_by_ics_token(ics_token: str) -> Optional[SessionRead]:
             expires_at_utc=parse_utc(row["expires_at_utc"]),
             last_seen_utc=parse_utc(row["last_seen_utc"]) if row["last_seen_utc"] else None,
             display_name=row["display_name"],
+            profile_skipped=bool(row["profile_skipped"]) if "profile_skipped" in row.keys() else False,
             messages_count_today=row["messages_count_today"],
         )
 
