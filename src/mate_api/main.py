@@ -1,3 +1,4 @@
+from typing import Optional
 """
 FastAPI Application - Mate Routine Companion
 API v1 con endpoints para chat, agenda, proactividad SSE y calendario .ics

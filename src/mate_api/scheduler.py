@@ -126,7 +126,8 @@ class ProactiveScheduler:
         upcoming_memories = await get_upcoming_memory_events(session_id, days_ahead=7)
 
         # Obtener tono de la sesión
-        db_session = await get_db_session(session_id)
+        from .database import get_session
+        db_session = await get_session(session_id)
         tone = db_session.tone.value if db_session else "amable"
 
         # Armar contexto para el LLM

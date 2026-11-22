@@ -41,6 +41,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD ["python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3).status == 200 else 1)"]
 
 # Uvicorn with single worker (scheduler, SSE and in-memory rate limit don't work with multiple)
+ENV PYTHONPATH=/app
+WORKDIR /app
+ENV DATABASE_PATH=/data/mate.db
 CMD ["uvicorn", "src.mate_api.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
 
 # Drop privileges to non-root user after CMD is set
