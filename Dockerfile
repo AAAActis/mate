@@ -35,7 +35,7 @@ COPY src/mate_api/ /app/src/mate_api/
 
 # Healthcheck using python urllib (no wget/curl in slim image)
 # The app serves /health/ready on port 8080
-COPY --chmod=0644 /app/src/mate_api/healthcheck.py /app/healthcheck.py
+COPY --chmod=0644 src/mate_api/healthcheck.py /app/healthcheck.py
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD ["python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3).status == 200 else 1)"]
