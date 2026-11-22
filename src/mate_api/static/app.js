@@ -406,6 +406,30 @@ document.querySelectorAll('.tono').forEach((b) => b.addEventListener('click', as
   if (resp.ok) marcarTono((await resp.json()).tone);
 }));
 
+// ── Tono Mode (Automático/Amable/Firme) ─────────────────────────────────────
+function marcarTonoModo(modo) {
+  document.querySelectorAll('.tono-modo-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.modo === modo)));
+}
+document.querySelectorAll('.tono-modo-btn').forEach((b) => b.addEventListener('click', async () => {
+  const resp = await fetch('/api/v1/tone/mode', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tone_mode: b.dataset.modo }),
+  });
+  if (resp.ok) marcarTonoModo((await resp.json()).tone_mode);
+}));
+
+function mostrarTonoDetectado(tono) {
+  const el = $('tono-detectado');
+  if (!el) return;
+  if (tono) {
+    el.textContent = `Tono usado: ${tono}`;
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
 // ── Copiar globo ─────────────────────────────────────────────────────────────
 document.querySelector('.copiar-btn')?.addEventListener('click', () => {
   const texto = $('globo-texto-largo').textContent;
@@ -437,6 +461,7 @@ async function enviar(texto) {
     const data = await resp.json();
     decir(data.reply, data.avatar_state);
     mostrarChips(data.tools_executed || []);
+    mostrarTonoDetectado(data.tone_used);
     input.value = '';
     hideSuggestionCards();
     await cargarSesion().catch((e) => console.error('Error al recargar sesión:', e));

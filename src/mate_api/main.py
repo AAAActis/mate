@@ -660,6 +660,7 @@ async def chat_endpoint(
         ],
         "state_snapshot": response_data.state_snapshot,
         "is_degraded": response_data.is_degraded,
+        "tone_used": response_data.tone_used,
     }
 
 
