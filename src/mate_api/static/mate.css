@@ -166,13 +166,6 @@
 .mate[data-forma="camionero"] .m-piso { transform: translateY(10px); }
 .mate[data-forma="torpedo"]  .m-piso { transform: translateY(16px); }
 
-/* luz y sombra recortadas a la silueta de cada forma */
-.mate .m-sombreado,
-.mate[data-forma="clasica"] .m-sombreado { clip-path: url(#mate-clip-clasica); }
-.mate[data-forma="camionero"] .m-sombreado { clip-path: url(#mate-clip-camionero); }
-.mate[data-forma="torpedo"]   .m-sombreado { clip-path: url(#mate-clip-torpedo); }
-.mate[data-forma="imperial"]  .m-sombreado { clip-path: url(#mate-clip-imperial); }
-.mate[data-forma="galleta"]   .m-sombreado { clip-path: url(#mate-clip-galleta); }
 
 /* mates forrados en cuero: banda de alpaca, repujado y patitas */
 .mate .m-banda { fill: var(--m-alpaca); stroke: var(--m-ink); stroke-width: 3; stroke-linejoin: round; }
