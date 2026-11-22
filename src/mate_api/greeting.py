@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import asyncio
 
-from .agent import get_agent
+from .agent import get_agent, strip_tone
 from .database import get_session as get_db_session
 from .models import Tone
 
@@ -115,6 +115,7 @@ Tono: {tone} (amable = cálido, firme = directo).
                 raise Exception(resp.error or "No content")
 
             greeting_text = resp.content.strip()
+            greeting_text, _ = strip_tone(greeting_text)
 
             result = {
                 "text": greeting_text,

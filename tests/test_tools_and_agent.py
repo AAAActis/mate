@@ -271,7 +271,7 @@ class TestAgent:
         assert "bien ahi" not in response.reply.lower()
 
     async def test_max_tool_calls_limit(self):
-        """Verifica que el agente respeta MAX_TOOL_CALLS_PER_TURN = 4."""
+        """Verifica que el agente respeta MAX_TOOL_CALLS_PER_TURN = 6."""
         import secrets
         import os
         import tempfile
@@ -281,7 +281,7 @@ class TestAgent:
         from mate_api.models import Tone, ToolCall
 
         # Valor esperado hardcodeado para detectar mutaciones
-        EXPECTED_MAX_TOOL_CALLS = 4
+        EXPECTED_MAX_TOOL_CALLS = 6
 
         # Setup temp DB con LLM habilitado
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -324,7 +324,7 @@ class TestAgent:
         a = agent.MateAgent(sid, Tone.AMABLE)
         a.llm = MockLLM()
 
-        # El agente debería cortar después de 4 tool calls
+        # El agente debería cortar después de 6 tool calls
         # Verificamos tool_calls_this_turn que cuenta TODOS los intentos (no solo exitosos)
         response = await a.process("Haz muchas tareas", [])
         assert a.tool_calls_this_turn <= EXPECTED_MAX_TOOL_CALLS, \

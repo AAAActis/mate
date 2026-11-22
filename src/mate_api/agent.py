@@ -1,6 +1,6 @@
 """
 Agente Mate con Tool Calling (Gemini Native API) + Fallback Determinístico.
-- Límite estricto: MAX_TOOL_CALLS_PER_TURN = 4
+- Límite estricto: MAX_TOOL_CALLS_PER_TURN = 6
 - Modo degradado si no hay API Key, falla la red o se agota presupuesto de tokens.
 - Anti-Prompt Injection: <user_data> tags + instrucción de sistema explícita.
 - Tonos: "amable" (cálido) vs "firme" (directo) con guardrail ético.
@@ -85,7 +85,25 @@ def to_gemini_schema(schema: dict) -> dict:
 # Configuración
 # ──────────────────────────────────────────────────────────────────────
 
-MAX_TOOL_CALLS_PER_TURN = 4
+MAX_TOOL_CALLS_PER_TURN = 6
+
+import re
+
+_TONE_PATTERN = re.compile(r"\[\s*tono\s*:\s*(amable|firme)\s*\]", re.IGNORECASE)
+
+
+def strip_tone(text: str) -> tuple[str, str | None]:
+    """Remueve la marca [tono:amable|firme] del texto y devuelve (texto_limpio, tono_detectado).
+    El tono detectado es 'amable' o 'firme', o None si no había marca.
+    """
+    if not text:
+        return text, None
+    match = _TONE_PATTERN.search(text)
+    if not match:
+        return text, None
+    tono = match.group(1).lower()
+    cleaned = _TONE_PATTERN.sub("", text, count=1).lstrip()
+    return cleaned, tono
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -762,14 +780,8 @@ class MateAgent:
         if not final_content:
             final_content = "Listo. ¿Algo más?"
 
-        # Extraer tono usado del response (marca [tono:amable] o [tono:firme] al inicio)
-        tone_used = None
-        tone_prefix_pattern = r"^\[tono:(amable|firme)\]\s*"
-        import re
-        match = re.match(tone_prefix_pattern, final_content.strip())
-        if match:
-            tone_used = match.group(1)
-            final_content = re.sub(tone_prefix_pattern, "", final_content, count=1).lstrip()
+        # Extraer tono usado del response (marca [tono:amable] o [tono:firme] en cualquier posición)
+        final_content, tone_used = strip_tone(final_content)
 
         # Determinar avatar_state y tone_used basado en tools ejecutadas y tono
         if tools_executed:

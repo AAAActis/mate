@@ -257,7 +257,7 @@ class ProactiveScheduler:
     ) -> Optional[str]:
         """Pide al LLM un mensaje proactivo contextual."""
         try:
-            from .agent import LLMClient
+            from .agent import LLMClient, strip_tone
 
             # Prompt para mensaje proactivo
             prompt = f"""Generá un mensaje proactivo corto (máx 2 frases) para esta situación:
@@ -286,7 +286,8 @@ El mensaje debe ser natural, como si un amigo avisara. No saludes genéricos."""
             if resp.error or not resp.content:
                 return None
 
-            return resp.content.strip()
+            content, _ = strip_tone(resp.content.strip())
+            return content
         except Exception:
             return None
 

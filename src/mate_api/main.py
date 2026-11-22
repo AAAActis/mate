@@ -65,7 +65,7 @@ from .database import (
     delete_block,
     get_block_with_completed,
 )
-from .agent import MateAgent, get_agent
+from .agent import MateAgent, get_agent, strip_tone
 from .scheduler import get_scheduler
 from .ics_builder import build_ics, build_reminder_ics
 from .security import (
@@ -408,7 +408,7 @@ async def _generate_completion_reaction(session_id: str, item_type: str, item_de
     """Genera una reacción corta del LLM al completar un ítem.
     Si el LLM falla, devuelve string vacío (no se dice nada, solo se tacha)."""
     try:
-        from .agent import LLMClient
+        from .agent import LLMClient, strip_tone
         from .prompts import arm_contexto, get_system_prompt
         from .database import list_memories, list_habits, list_upcoming_blocks, get_upcoming_memory_events, get_session as get_db_session
         from datetime import datetime, timezone
@@ -456,7 +456,8 @@ Tono: {tone}."""
         ]
         resp = await llm.chat(messages, [])
         if not resp.error and resp.content:
-            return resp.content.strip()
+            content, _ = strip_tone(resp.content.strip())
+            return content
     except Exception:
         pass
     return ""
@@ -862,7 +863,7 @@ Natural, como un amigo que avisa. No saludes genéricos."""
         ]
         resp = await llm.chat(messages, [])
         if not resp.error and resp.content:
-            message = resp.content.strip()
+            message, _ = strip_tone(resp.content.strip())
 
     # Enviar a conexiones SSE activas
     await scheduler._broadcast_to_session(session_id, type('obj', (object,), {

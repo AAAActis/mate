@@ -35,7 +35,9 @@ function setEstado(estado) {
   }
 }
 function mostrarChips(herramientas) {
-  const cont = $('globo-chips');
+  // Chips solo en el panel de ingeniería (⚙), no en el globo
+  const cont = document.querySelector('#dialog-panel .globo-chips');
+  if (!cont) return;
   cont.replaceChildren();
 
   // Group by tool name to avoid duplicates
@@ -296,7 +298,11 @@ function pintarSesion() {
     $('perfil-inicial').textContent = nombre.charAt(0).toUpperCase();
     marcarTono(sesion.tone);
     $('contador-cuota').textContent = String(sesion.session?.messages_count_today ?? 0);
-    if (sesion.greeting) decirSaludo(sesion.greeting.text, sesion.greeting.avatar_state);
+    // Saludo solo en la primera carga de la página (no al recargar tras un mensaje)
+    if (sesion.greeting && !pintarSesion.ya) {
+      pintarSesion.ya = true;
+      decirSaludo(sesion.greeting.text, sesion.greeting.avatar_state);
+    }
 
     // Sidebar agenda summary: "X cosas hoy · Y mañana"
     const resumenEl = $('resumen-agenda');
