@@ -1,0 +1,76 @@
+<!-- ESCENA: reemplaza el contenido del escenario. El globo (#globo) va a la derecha, dentro de .escena -->
+<div class="escena" data-momento="tarde">
+
+  <!-- cielo de fondo: cambia según la hora (o la elección del usuario) -->
+  <div class="escena-cielo" aria-hidden="true">
+    <svg class="astro sol" viewBox="0 0 120 120">
+      <circle cx="60" cy="60" r="56" fill="currentColor" opacity=".18"/>
+      <circle cx="60" cy="60" r="38" fill="currentColor" opacity=".28"/>
+      <circle cx="60" cy="60" r="24" fill="currentColor"/>
+    </svg>
+    <svg class="astro luna" viewBox="0 0 100 100">
+      <defs>
+        <mask id="luna-corte">
+          <rect width="100" height="100" fill="#fff"/>
+          <circle cx="64" cy="40" r="30" fill="#000"/>
+        </mask>
+      </defs>
+      <circle cx="48" cy="52" r="34" fill="#f3ead8" mask="url(#luna-corte)"/>
+    </svg>
+    <svg class="estrellas" viewBox="0 0 400 200" preserveAspectRatio="none">
+      <path d="M40 30 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z"/>
+      <path d="M120 70 l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 Z"/>
+      <path d="M210 24 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z"/>
+      <path d="M300 60 l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 Z"/>
+      <path d="M360 120 l2 6 l6 2 l-6 2 l-2 6 l-2 -6 l-6 -2 l6 -2 Z"/>
+      <path d="M80 150 l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 Z"/>
+    </svg>
+  </div>
+
+  <!-- termo + mate apoyados en la repisa -->
+  <div class="escena-mesa">
+    <svg class="termo" viewBox="0 0 90 220" aria-hidden="true">
+      <rect x="30" y="2" width="22" height="14" rx="4" fill="#d9dcdb" stroke="#3a2e24" stroke-width="3"/>
+      <rect x="14" y="14" width="54" height="34" rx="9" fill="var(--termo-tapa, #3b5130)" stroke="#3a2e24" stroke-width="3.5"/>
+      <rect x="10" y="44" width="62" height="168" rx="16" fill="var(--termo, #4f6b3a)" stroke="#3a2e24" stroke-width="3.5"/>
+      <path d="M72 70 C92 72 92 150 72 152" fill="none" stroke="#3a2e24" stroke-width="10" stroke-linecap="round"/>
+      <path d="M72 70 C92 72 92 150 72 152" fill="none" stroke="var(--termo-tapa, #3b5130)" stroke-width="5" stroke-linecap="round"/>
+      <rect x="20" y="58" width="8" height="140" rx="4" fill="#fff" opacity=".18"/>
+      <rect x="10" y="186" width="62" height="12" fill="#d9dcdb" stroke="#3a2e24" stroke-width="3"/>
+    </svg>
+
+    <!-- acá va el <svg id="mate" class="mate"> -->
+  </div>
+
+  <!-- acá va el <div id="globo" class="globo"> -->
+</div>
+
+<!-- PERSONALIZAR: botón para la topbar y panel -->
+<button type="button" class="btn-personalizar" aria-haspopup="dialog" aria-controls="panel-personalizar" title="Personalizar">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4-4-7.4-9-7.4Z"/>
+    <circle cx="7.5" cy="11.5" r="1"/><circle cx="10.5" cy="7.5" r="1"/><circle cx="15" cy="7.5" r="1"/>
+  </svg>
+</button>
+
+<div id="panel-personalizar" class="panel-personalizar" role="dialog" aria-label="Personalizar" hidden>
+  <p class="pp-titulo">Calabaza</p>
+  <div class="pp-opciones">
+    <button type="button" data-set="calabaza" data-valor="clasica" style="--sw:#9a5f33">Clásica</button>
+    <button type="button" data-set="calabaza" data-valor="madera" style="--sw:#c08a52">Madera</button>
+    <button type="button" data-set="calabaza" data-valor="negra" style="--sw:#3d3532">Negra</button>
+    <button type="button" data-set="calabaza" data-valor="ceramica" style="--sw:#5f7f4a">Cerámica</button>
+  </div>
+  <p class="pp-titulo">Virola y bombilla</p>
+  <div class="pp-opciones">
+    <button type="button" data-set="virola" data-valor="alpaca" style="--sw:#d9dcdb">Alpaca</button>
+    <button type="button" data-set="virola" data-valor="dorada" style="--sw:#e0c06a">Dorada</button>
+  </div>
+  <p class="pp-titulo">Fondo</p>
+  <div class="pp-opciones">
+    <button type="button" data-set="fondo" data-valor="auto" style="--sw:linear-gradient(135deg,#f7efd9,#f6dcc0 50%,#26302a 50%)">Según la hora</button>
+    <button type="button" data-set="fondo" data-valor="manana" style="--sw:#f7efd9">Mañana</button>
+    <button type="button" data-set="fondo" data-valor="tarde" style="--sw:#f6dcc0">Tarde</button>
+    <button type="button" data-set="fondo" data-valor="noche" style="--sw:#26302a">Noche</button>
+  </div>
+</div>

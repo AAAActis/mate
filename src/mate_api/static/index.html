@@ -85,7 +85,15 @@
 
       <!-- Panel de personalización -->
       <div id="panel-personalizar" class="panel-personalizar" role="dialog" aria-label="Personalizar" hidden>
-        <p class="pp-titulo">Calabaza</p>
+        <p class="pp-titulo">Forma</p>
+        <div class="pp-opciones">
+          <button type="button" data-set="forma" data-valor="clasica" style="--sw:#9a5f33">Clásico</button>
+          <button type="button" data-set="forma" data-valor="galleta" style="--sw:#9a5f33">Galleta</button>
+          <button type="button" data-set="forma" data-valor="torpedo" style="--sw:#3d3532">Torpedo</button>
+          <button type="button" data-set="forma" data-valor="imperial" style="--sw:#e0c06a">Imperial</button>
+          <button type="button" data-set="forma" data-valor="camionero" style="--sw:#c08a52">Camionero</button>
+        </div>
+        <p class="pp-titulo">Color</p>
         <div class="pp-opciones">
           <button type="button" data-set="calabaza" data-valor="clasica" style="--sw:#9a5f33">Clásica</button>
           <button type="button" data-set="calabaza" data-valor="madera" style="--sw:#c08a52">Madera</button>
@@ -148,8 +156,16 @@
             <rect x="10" y="186" width="62" height="12" fill="#d9dcdb" stroke="#3a2e24" stroke-width="3"/>
           </svg>
 
-          <!-- SVG del Mate con vapor y mirada -->
+          <!-- SVG del Mate con vapor, mirada y 5 formas (clasica, galleta, torpedo, imperial, camionero) -->
           <svg id="mate" class="mate" data-state="neutro" viewBox="0 0 240 270" role="img" aria-label="Mate, tu asistente">
+            <defs>
+              <clipPath id="mate-clip-clasica"><path d="M76 98 C46 112 30 146 32 180 C34 226 72 252 120 252 C168 252 206 226 208 180 C210 146 194 112 164 98 Z"/></clipPath>
+              <clipPath id="mate-clip-camionero"><path d="M44 112 C30 130 28 166 32 196 C36 228 72 246 120 248 C168 246 204 228 208 196 C212 166 210 130 196 112 Z"/></clipPath>
+              <clipPath id="mate-clip-torpedo"><path d="M70 112 C44 124 36 160 40 190 C44 222 76 244 120 248 C164 244 196 222 200 190 C204 160 196 124 170 112 Z"/></clipPath>
+              <clipPath id="mate-clip-imperial"><path d="M64 114 C52 130 48 160 50 190 C52 222 80 240 120 242 C160 240 188 222 190 190 C192 160 188 130 176 114 Z"/></clipPath>
+              <clipPath id="mate-clip-galleta"><path d="M70 102 C32 110 18 146 22 176 C26 212 66 234 120 234 C174 234 214 212 218 176 C222 146 208 110 170 102 Z"/></clipPath>
+            </defs>
+
             <!-- sombra en el piso -->
             <ellipse class="m-piso" cx="120" cy="258" rx="74" ry="7"/>
 
@@ -175,10 +191,39 @@
               <circle class="m-mano" cx="202" cy="214" r="9"/>
             </g>
 
-            <!-- porongo -->
-            <path class="m-cuerpo" d="M76 98 C46 112 30 146 32 180 C34 226 72 252 120 252 C168 252 206 226 208 180 C210 146 194 112 164 98 Z"/>
-            <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z"/>
-            <path class="m-sombra" d="M178 118 C202 148 204 200 170 236 C186 230 210 204 206 168 C204 146 196 128 178 118 Z"/>
+            <!-- porongo: 5 formas -->
+            <path class="m-cuerpo f-clasica"   d="M76 98 C46 112 30 146 32 180 C34 226 72 252 120 252 C168 252 206 226 208 180 C210 146 194 112 164 98 Z"/>
+            <path class="m-cuerpo f-camionero" d="M44 112 C30 130 28 166 32 196 C36 228 72 246 120 248 C168 246 204 228 208 196 C212 166 210 130 196 112 Z"/>
+            <path class="m-cuerpo f-torpedo"   d="M70 112 C44 124 36 160 40 190 C44 222 76 244 120 248 C164 244 196 222 200 190 C204 160 196 124 170 112 Z"/>
+            <path class="m-cuerpo f-imperial"  d="M64 114 C52 130 48 160 50 190 C52 222 80 240 120 242 C160 240 188 222 190 190 C192 160 188 130 176 114 Z"/>
+            <path class="m-cuerpo f-galleta"   d="M70 102 C32 110 18 146 22 176 C26 212 66 234 120 234 C174 234 214 212 218 176 C222 146 208 110 170 102 Z"/>
+            <g class="m-sombreado">
+              <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z"/>
+              <path class="m-sombra" d="M178 118 C202 148 204 200 170 236 C186 230 210 204 206 168 C204 146 196 128 178 118 Z"/>
+            </g>
+
+            <!-- detalles según la forma -->
+            <g class="m-extra f-camionero">
+              <path class="m-banda" d="M40 98 L200 98 L200 118 Q120 132 40 118 Z"/>
+              <path class="m-repujado" d="M52 214 C58 200 72 200 76 214 C70 222 58 222 52 214 Z M164 214 C168 200 182 200 188 214 C182 222 170 222 164 214 Z"/>
+              <path class="m-repujado-linea" d="M64 214 L64 230 M176 214 L176 230"/>
+              <path class="m-pata" d="M78 236 L88 256 L98 242 Z M110 244 L120 262 L130 244 Z M142 242 L152 256 L162 236 Z"/>
+            </g>
+            <g class="m-extra f-torpedo">
+              <path class="m-banda" d="M68 96 L172 96 L172 120 Q120 134 68 120 Z"/>
+              <path class="m-banda-linea" d="M68 108 Q120 120 172 108"/>
+              <path class="m-pata" d="M90 238 L96 258 L104 244 Z M112 246 L120 266 L128 246 Z M136 244 L144 258 L150 238 Z"/>
+              <path class="m-flecos" d="M98 258 L96 266 M101 254 L102 264 M118 266 L116 272 M122 266 L124 272 M142 258 L144 266 M139 254 L138 264"/>
+            </g>
+            <g class="m-extra f-imperial">
+              <path class="m-banda" d="M58 92 L182 92 L182 124 Q120 138 58 124 Z"/>
+              <path class="m-banda-linea" d="M58 100 Q120 112 182 100 M58 118 Q120 130 182 118"/>
+              <path class="m-grabado-onda" d="M62 110 q8 -6 16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0"/>
+              <path class="m-pata" d="M80 234 C78 248 84 258 90 256 C95 254 96 244 98 238 Z M112 240 C110 254 116 264 120 264 C124 264 130 254 128 240 Z M142 238 C144 244 145 254 150 256 C156 258 162 248 160 234 Z"/>
+            </g>
+            <g class="m-extra f-galleta">
+              <path class="m-costura" d="M30 150 Q120 132 210 150"/>
+            </g>
 
             <!-- vapor (sube suave desde la yerba) -->
             <g class="m-vapor" aria-hidden="true">
@@ -196,11 +241,13 @@
               <path class="m-boquilla" d="M88 18 Q96 4 108 12 L104 20 Q97 14 92 22 Z"/>
             </g>
 
+            <g class="m-boca-mate">
             <!-- virola de alpaca y yerba -->
             <ellipse class="m-virola" cx="120" cy="98" rx="52" ry="14"/>
             <path class="m-virola-brillo" d="M76 96 Q120 86 164 96"/>
             <ellipse class="m-yerba" cx="120" cy="96" rx="42" ry="8"/>
             <path class="m-yerba-grano" d="M98 95 l3 -2 M112 93 l3 2 M130 94 l2 -2 M141 96 l3 1"/>
+            </g>
             <!-- vuelvo a dibujar la base de la bombilla encima de la yerba -->
             <line class="m-bombilla-borde" x1="128" y1="96" x2="122" y2="82"/>
             <line class="m-bombilla-metal" x1="128" y1="96" x2="122" y2="82"/>

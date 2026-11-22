@@ -110,3 +110,9 @@
   .escena, .escena-cielo .astro { transition: none; }
   .escena-cielo .estrellas path { animation: none; }
 }
+
+/* que cada forma quede apoyada sobre la repisa */
+.escena-mesa .mate[data-forma="galleta"]  { margin-bottom: -34px; }
+.escena-mesa .mate[data-forma="imperial"]  { margin-bottom: 5px; }
+.escena-mesa .mate[data-forma="camionero"] { margin-bottom: 2px; }
+.escena-mesa .mate[data-forma="torpedo"]  { margin-bottom: 10px; }

@@ -4,7 +4,7 @@
   "use strict";
 
   const CLAVE = "mate-personal";
-  const POR_DEFECTO = { calabaza: "clasica", virola: "alpaca", fondo: "auto" };
+  const POR_DEFECTO = { forma: "clasica", calabaza: "clasica", virola: "alpaca", fondo: "auto" };
 
   function leer() {
     try { return Object.assign({}, POR_DEFECTO, JSON.parse(localStorage.getItem(CLAVE) || "{}")); }
@@ -29,6 +29,7 @@
     const mates = document.querySelectorAll("svg.mate");   // el grande y el del logo si es un clon
     if (escena) escena.dataset.momento = p.fondo === "auto" ? momentoActual() : p.fondo;
     mates.forEach(function (m) {
+      m.dataset.forma = p.forma;
       m.dataset.calabaza = p.calabaza;
       m.dataset.virola = p.virola;
     });
