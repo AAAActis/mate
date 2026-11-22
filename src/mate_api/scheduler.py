@@ -1,6 +1,6 @@
 """
 Scheduler proactivo para Mate - Loop asíncrono que evalúa sesiones cada 60s
-y dispara eventos SSE (gym, estudio, cumpleaños).
+y dispara eventos SSE. Detecta situaciones y pide al LLM el mensaje.
 """
 import asyncio
 import logging
@@ -18,6 +18,9 @@ from .database import (
 )
 from .database import list_active_sessions
 from .models import Category, ProactiveTriggerRequest
+from .prompts import arm_contexto
+from .agent import get_agent
+from .models import Tone
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +29,7 @@ logger = logging.getLogger(__name__)
 class ProactiveMessage:
     """Mensaje proactivo para enviar por SSE."""
     session_id: str
-    event_type: str  # "gym" | "estudio" | "cumple"
+    event_type: str  # "evento_proximo" | "tarea_vencida" | "manana" | "recordatorio"
     message: str
     avatar_state: str
 
@@ -34,9 +37,10 @@ class ProactiveMessage:
 class ProactiveScheduler:
     """
     Loop en segundo plano que cada 60s evalúa:
-    1. Hábitos pendientes pasada su hora habitual
-    2. Bloques de estudio próximos (<= 30 min)
-    3. Eventos/cumpleaños dentro de 7 días
+    1. Evento que empieza en <= 30 min
+    2. Evento/recordatorio para mañana
+    3. Tarea/hábito que pasó su hora sin completar
+    4. Pide al LLM que genere el mensaje contextual
     """
 
     def __init__(self):
@@ -103,78 +107,188 @@ class ProactiveScheduler:
             if session_id not in self._active_connections:
                 continue
 
-            # Evaluar los 3 escenarios
+            # Evaluar situaciones proactivas
             messages = await self._evaluate_session(session_id, conn)
             for msg in messages:
                 await self._broadcast_to_session(msg.session_id, msg)
 
     async def _evaluate_session(self, session_id: str, conn) -> List[ProactiveMessage]:
-        """Evalúa una sesión y devuelve mensajes proactivos."""
+        """Evalúa una sesión y devuelve mensajes proactivos generados por LLM."""
         messages = []
         now = datetime.now(timezone.utc)
         now_local = now.astimezone()  # Hora local del servidor
 
-        # 1. Hábitos pendientes pasada su hora habitual
+        # Obtener datos de la sesión
+        from .database import list_memories
+        memories = await list_memories(session_id)
         habits = await list_habits(session_id)
+        blocks = await list_upcoming_blocks(session_id, limit=30)
+        upcoming_memories = await get_upcoming_memory_events(session_id, days_ahead=7)
+
+        # Obtener tono de la sesión
+        db_session = await get_db_session(session_id)
+        tone = db_session.tone.value if db_session else "amable"
+
+        # Armar contexto para el LLM
+        ctx = arm_contexto(
+            session_id,
+            memories=[m.model_dump(mode="json") for m in memories],
+            habits=[h.model_dump(mode="json") for h in habits],
+            blocks=[b.model_dump(mode="json") for b in blocks],
+            upcoming_memories=[m.model_dump(mode="json") for m in upcoming_memories],
+            now=now,
+            tone=tone,
+        )
+
+        system_prompt = ctx["system_prompt"]
+        memoria = ctx["memoria"]
+        agenda = ctx["agenda"]
+        fecha_hora = ctx["fecha_hora"]
+        dias = ctx["dias"]
+
+        # 1. Detectar: Evento que empieza en <= 30 min
+        for block in blocks:
+            try:
+                block_start = datetime.fromisoformat(block.start_utc.replace("Z", "+00:00"))
+                minutes_until = int((block_start - now).total_seconds() / 60)
+                if 0 <= minutes_until <= 30:
+                    # Pedir al LLM el mensaje
+                    llm_message = await self._ask_llm_proactive(
+                        system_prompt, memoria, agenda, fecha_hora, dias,
+                        f"Evento que empieza en {minutes_until} minutos: {block.title} a las {block_start.strftime('%H:%M')}",
+                        tone
+                    )
+                    if llm_message:
+                        messages.append(ProactiveMessage(
+                            session_id=session_id,
+                            event_type="evento_proximo",
+                            message=llm_message,
+                            avatar_state="hablando",
+                        ))
+            except Exception:
+                pass
+
+        # 2. Detectar: Evento/recordatorio para mañana
+        tomorrow = now + timedelta(days=1)
+        tomorrow_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow_end = tomorrow_start + timedelta(days=1)
+        for block in blocks:
+            try:
+                block_start = datetime.fromisoformat(block.start_utc.replace("Z", "+00:00"))
+                if block_start >= tomorrow_start and block_start < tomorrow_end:
+                    llm_message = await self._ask_llm_proactive(
+                        system_prompt, memoria, agenda, fecha_hora, dias,
+                        f"Evento para mañana: {block.title} a las {block_start.strftime('%H:%M')}",
+                        tone
+                    )
+                    if llm_message:
+                        messages.append(ProactiveMessage(
+                            session_id=session_id,
+                            event_type="manana",
+                            message=llm_message,
+                            avatar_state="contento",
+                        ))
+            except Exception:
+                pass
+
+        # 3. Detectar: Hábito que toca hoy y ya pasó su hora sin cumplimiento
+        today_str = now_local.strftime("%Y-%m-%d")
         for habit in habits:
             if habit.done_this_week >= habit.target_per_week:
-                continue  # Ya cumplido esta semana
-
+                continue
             try:
                 h, m = map(int, habit.preferred_time.split(":"))
                 habit_time = now_local.replace(hour=h, minute=m, second=0, microsecond=0)
 
-                # Si pasó la hora habitual y es el mismo día
+                # Si pasó la hora habitual y es el mismo día, y no se notificó hoy
                 if now_local >= habit_time and now_local.date() == habit_time.date():
-                    # Verificar si ya notificamos hoy (evitar spam)
                     if habit.last_checkin_date != now_local.date().isoformat():
-                        messages.append(ProactiveMessage(
-                            session_id=session_id,
-                            event_type="gym",
-                            message=f"¿Ya fuiste al {habit.name.lower()} hoy? 💪",
-                            avatar_state="hablando",
-                        ))
-            except (ValueError, AttributeError):
+                        llm_message = await self._ask_llm_proactive(
+                            system_prompt, memoria, agenda, fecha_hora, dias,
+                            f"Hábito pendiente: {habit.name} (hora habitual {habit.preferred_time}, ya pasó)",
+                            tone
+                        )
+                        if llm_message:
+                            messages.append(ProactiveMessage(
+                                session_id=session_id,
+                                event_type="tarea_vencida",
+                                message=llm_message,
+                                avatar_state="serio" if tone == "firme" else "hablando",
+                            ))
+            except Exception:
                 pass
 
-        # 2. Bloques de estudio próximos (<= 30 min)
-        blocks = await list_upcoming_blocks(session_id, limit=10)
-        for block in blocks:
-            if block.category == Category.ESTUDIO:
-                minutes_until = int((block.start_utc - now).total_seconds() / 60)
-                if not 0 <= minutes_until <= 30:
-                    continue
-                messages.append(ProactiveMessage(
-                    session_id=session_id,
-                    event_type="estudio",
-                    message=f"Hoy toca {block.title.lower()}, ¿arrancamos? (en {minutes_until} min) 📚",
-                    avatar_state="hablando",
-                ))
-
-        # 3. Eventos/cumpleaños dentro de 7 días
-        memories = await get_upcoming_memory_events(session_id, days_ahead=7)
-        for mem in memories:
-            if mem.event_date:
-                try:
-                    event_date = datetime.fromisoformat(mem.event_date).date()
-                    days_until = (event_date - now_local.date()).days
-                    if 0 <= days_until <= 7:
-                        if days_until == 0:
-                            msg = f"¡Hoy es {mem.fact_value}! 🎂"
-                        elif days_until == 7:
-                            msg = f"Falta una semana para {mem.fact_value}, ¿qué le regalamos? 🎁"
-                        else:
-                            msg = f"Faltan {days_until} días para {mem.fact_value} 📅"
+        # 4. Detectar: Tarea con due_date de hoy que ya pasó su due_time sin completar
+        from .database import list_tasks_today
+        tasks = await list_tasks_today(session_id, {"today_iso": today_str})
+        for task in tasks:
+            if task.completed or not task.due_time:
+                continue
+            try:
+                h, m = map(int, task.due_time.split(":"))
+                task_time = now_local.replace(hour=h, minute=m, second=0, microsecond=0)
+                if now_local >= task_time and now_local.date() == task_time.date():
+                    llm_message = await self._ask_llm_proactive(
+                        system_prompt, memoria, agenda, fecha_hora, dias,
+                        f"Tarea pendiente: {task.title} (para hoy a las {task.due_time}, ya pasó la hora)",
+                        tone
+                    )
+                    if llm_message:
                         messages.append(ProactiveMessage(
                             session_id=session_id,
-                            event_type="cumple",
-                            message=msg,
-                            avatar_state="contento",
+                            event_type="tarea_vencida",
+                            message=llm_message,
+                            avatar_state="serio" if tone == "firme" else "hablando",
                         ))
-                except (ValueError, AttributeError):
-                    pass
+            except Exception:
+                pass
 
         return messages
+
+    async def _ask_llm_proactive(
+        self,
+        system_prompt: str,
+        memoria: str,
+        agenda: str,
+        fecha_hora: str,
+        dias: str,
+        situation: str,
+        tone: str,
+    ) -> Optional[str]:
+        """Pide al LLM un mensaje proactivo contextual."""
+        try:
+            from .agent import LLMClient
+
+            # Prompt para mensaje proactivo
+            prompt = f"""Generá un mensaje proactivo corto (máx 2 frases) para esta situación:
+{situation}
+
+Contexto del usuario:
+{memoria}
+{agenda}
+{fecha_hora}
+{dias}
+
+Tono: {tone}.
+El mensaje debe ser natural, como si un amigo avisara. No saludes genéricos."""
+
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"<user_data>{prompt}</user_data>"},
+            ]
+
+            llm = LLMClient()
+            if not llm.api_key:
+                return None
+
+            resp = await llm.chat(messages, [])
+
+            if resp.error or not resp.content:
+                return None
+
+            return resp.content.strip()
+        except Exception:
+            return None
 
     async def _broadcast_to_session(self, session_id: str, msg: ProactiveMessage):
         """Envía mensaje a todas las conexiones SSE de una sesión."""
@@ -204,13 +318,11 @@ class ProactiveScheduler:
     # ── Trigger manual para dashboard (reclutador) ──
 
     async def trigger_proactive(self, request: ProactiveTriggerRequest) -> str:
-        """Dispara un evento proactivo manual (para demo/reclutador)."""
-        messages = {
-            "gym": "¡Hora del gym! ¿Ya fuiste hoy? 💪",
-            "estudio": "Hoy toca estudiar, ¿arrancamos? 📚",
-            "cumple": "¡Próximo cumpleaños detectado! ¿Qué le regalamos? 🎁",
-        }
-        return messages.get(request.scenario, "Evento proactivo activado")
+        """Dispara un evento proactivo manual (para demo/reclutador).
+        Toma el próximo evento real de la sesión; si no hay, responde que no hay eventos."""
+        # Este endpoint se usa desde /api/v1/proactive/trigger con session_id
+        # La lógica real está en main.py que pasa el session_id
+        return "No hay eventos próximos para avisar"
 
 
 # Instancia global

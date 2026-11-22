@@ -58,6 +58,9 @@ from .database import (
     list_memories,
     create_message,
     get_messages,
+    complete_block,
+    delete_block,
+    get_block_with_completed,
 )
 from .agent import MateAgent, get_agent
 from .scheduler import get_scheduler
@@ -248,9 +251,21 @@ async def _ultimo_mensaje_assistant(session_id: str) -> Optional[dict]:
 # Helper: Calendar aggregation for /api/v1/session
 # ──────────────────────────────────────────────────────────────────────
 
+def _normalize_title(title: str) -> str:
+    """Normaliza título para comparación: lowercase, sin acentos, sin puntuación extra."""
+    import unicodedata
+    normalized = unicodedata.normalize('NFD', title.lower())
+    # Remover acentos y caracteres no alfanuméricos básicos
+    normalized = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+    # Remover puntuación común, mantener alfanuméricos y espacios
+    normalized = ''.join(c for c in normalized if c.isalnum() or c.isspace())
+    return ' '.join(normalized.split())  # normalizar espacios
+
+
 async def build_calendar_events(session_id: str) -> list[dict]:
     """Construye lista unificada de eventos para los próximos 30 días:
-    tareas, bloques, recordatorios y cumpleaños de memories."""
+    tareas, bloques, recordatorios y eventos especiales de memories.
+    Deduplica memories contra tasks/reminders existentes mismo día (título normalizado)."""
     from datetime import datetime, timedelta, timezone
     from zoneinfo import ZoneInfo
 
@@ -294,11 +309,11 @@ async def build_calendar_events(session_id: str) -> list[dict]:
                 except Exception:
                     pass
 
-    # Bloques de calendario
+    # Bloques de calendario (excluyendo recordatorios, que van en su propia sección)
     from .database import list_upcoming_blocks
     blocks = await list_upcoming_blocks(session_id, limit=100)
     for block in blocks:
-        if block.start_utc <= cutoff_utc:
+        if block.start_utc <= cutoff_utc and block.category.value != "recordatorio":
             local_start = block.start_utc.astimezone(CORDOBA_TZ)
             events.append({
                 "date": local_start.strftime("%Y-%m-%d"),
@@ -326,7 +341,15 @@ async def build_calendar_events(session_id: str) -> list[dict]:
                 "completed": False,
             })
 
-    # Cumpleaños/eventos de memories
+    # Build set of normalized titles per date for deduplication (tasks + reminders)
+    existing_titles_by_date = {}
+    for ev in events:
+        if ev["type"] in ("task", "reminder"):
+            date_key = ev["date"]
+            norm_title = _normalize_title(ev["title"])
+            existing_titles_by_date.setdefault(date_key, set()).add(norm_title)
+
+    # Eventos especiales de memories - deduplicar contra tasks/reminders mismo día
     from .database import get_upcoming_memory_events
     memories = await get_upcoming_memory_events(session_id, days_ahead=30)
     for mem in memories:
@@ -334,15 +357,18 @@ async def build_calendar_events(session_id: str) -> list[dict]:
             try:
                 event_dt = datetime.strptime(mem.event_date, "%Y-%m-%d")
                 if now_utc.date() <= event_dt.date() <= cutoff_utc.date():
-                    events.append({
-                        "date": mem.event_date,
-                        "title": mem.fact_value,
-                        "time": "09:00",
-                        "category": "recordatorio",
-                        "type": "birthday",
-                        "id": mem.id,
-                        "completed": False,
-                    })
+                    norm_title = _normalize_title(mem.fact_value)
+                    # Solo agregar si no existe ya un task/reminder con título similar ese día
+                    if mem.event_date not in existing_titles_by_date or norm_title not in existing_titles_by_date[mem.event_date]:
+                        events.append({
+                            "date": mem.event_date,
+                            "title": mem.fact_value,
+                            "time": "09:00",
+                            "category": "recordatorio",
+                            "type": "birthday",
+                            "id": mem.id,
+                            "completed": False,
+                        })
             except Exception:
                 pass
 
@@ -373,6 +399,64 @@ def problem_details(
             "instance": instance,
         },
     )
+
+
+async def _generate_completion_reaction(session_id: str, item_type: str, item_desc: str) -> str:
+    """Genera una reacción corta del LLM al completar un ítem.
+    Si el LLM falla, devuelve string vacío (no se dice nada, solo se tacha)."""
+    try:
+        from .agent import LLMClient
+        from .prompts import arm_contexto, get_system_prompt
+        from .database import list_memories, list_habits, list_upcoming_blocks, get_upcoming_memory_events, get_session as get_db_session
+        from datetime import datetime, timezone
+
+        db_session = await get_db_session(session_id)
+        tone = db_session.tone.value if db_session else "amable"
+
+        now = datetime.now(timezone.utc)
+        memories_list = await list_memories(session_id)
+        habits_list = await list_habits(session_id)
+        blocks_list = await list_upcoming_blocks(session_id, limit=30)
+        upcoming_memories = await get_upcoming_memory_events(session_id, days_ahead=7)
+
+        ctx = arm_contexto(
+            session_id,
+            memories=[m.model_dump(mode="json") for m in memories_list],
+            habits=[h.model_dump(mode="json") for h in habits_list],
+            blocks=[b.model_dump(mode="json") for b in blocks_list],
+            upcoming_memories=[m.model_dump(mode="json") for m in upcoming_memories],
+            now=now,
+            tone=tone,
+        )
+
+        system_prompt = get_system_prompt(tone)
+
+        prompt = f"""Generá una reacción corta (máx 1 frase) a que el usuario completó: {item_desc}.
+No uses felicitaciones genéricas ("¡Bien!", "¡Genial!"). Adaptá al contexto y al tono.
+Ejemplos: "¿Cómo te fue en la reunión?", "Listo, uno menos. ¿Seguimos?", "Buen ritmo, ¿qué sigue?"
+
+Contexto:
+{ctx['memoria']}
+{ctx['agenda']}
+{ctx['fecha_hora']}
+{ctx['dias']}
+
+Tono: {tone}."""
+
+        llm = LLMClient()
+        if not llm.api_key:
+            return ""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"<user_data>{prompt}</user_data>"},
+        ]
+        resp = await llm.chat(messages, [])
+        if not resp.error and resp.content:
+            return resp.content.strip()
+    except Exception:
+        pass
+    return ""
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -411,8 +495,6 @@ async def get_or_create_session_id(
     session_id = secrets.token_urlsafe(32)
     ics_token = secrets.token_urlsafe(32)
     await create_session(session_id, ics_token)
-    await seed_demo_events(session_id)
-
     # Set cookie HttpOnly con Max-Age 30 días
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -424,38 +506,6 @@ async def get_or_create_session_id(
         path="/",
     )
     return session_id
-
-
-async def seed_demo_events(session_id: str) -> None:
-    """Siembra 2 eventos de demostración con horarios relativos a 'ahora'.
-
-    El primero cae en +20 min (dentro de la ventana de 30 min del aviso
-    proactivo de estudio) y el segundo en +2 h. Así la demo respira siempre,
-    sin importar a qué hora se abra la app.
-    """
-    base = datetime.now().astimezone().replace(second=0, microsecond=0)
-
-    def _at(**kwargs):
-        # Redondeo al múltiplo de 5 min más cercano hacia arriba
-        moment = base + timedelta(**kwargs)
-        return moment + timedelta(minutes=(-moment.minute) % 5)
-
-    demo = (
-        ("Estudiar Bases de Datos", _at(minutes=20), Category.ESTUDIO),
-        ("Ir al gym", _at(hours=2), Category.GYM),
-    )
-    for title, start, category in demo:
-        end = start + timedelta(hours=1)
-        try:
-            await create_calendar_block(
-                session_id,
-                title,
-                start.astimezone(timezone.utc).isoformat(),
-                end.astimezone(timezone.utc).isoformat(),
-                category,
-            )
-        except ValueError:
-            pass  # Ya hay un bloque que se solapa: no insistir
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -489,7 +539,7 @@ async def get_session_state(
     from .database import get_session as get_db_session
     db_session = await get_db_session(session_id)
     session_tone = Tone(db_session.tone) if db_session else Tone.AMABLE
-    greeting = build_greeting(db_session, habits, blocks, memories, now, session_tone) if db_session else None
+    greeting = await build_greeting(db_session, habits, blocks, memories, now, session_tone) if db_session else None
     display_name = db_session.display_name if db_session else None
 
     # Evitar duplicar el saludo en messages al recargar la página.
@@ -630,14 +680,14 @@ async def complete_item(
     session_id: str = Depends(get_or_create_session_id),
 ):
     """
-    Marca tarea o hábito como cumplido (protegido contra BOLA).
-    item_type: "task" | "habit"
+    Marca tarea, hábito, bloque o recordatorio como cumplido (protegido contra BOLA).
+    item_type: "task" | "habit" | "block" | "reminder"
     """
-    if item_type not in ("task", "habit"):
+    if item_type not in ("task", "habit", "block", "reminder"):
         return problem_details(
             status=400,
             title="Bad Request",
-            detail="item_type debe ser 'task' o 'habit'",
+            detail="item_type debe ser 'task', 'habit', 'block' o 'reminder'",
             instance=str(request.url),
         )
 
@@ -650,8 +700,9 @@ async def complete_item(
                 detail="Tarea no encontrada o no pertenece a tu sesión",
                 instance=str(request.url),
             )
-        return {"completed": True, "message": "¡Tarea completada! ✅", "avatar_state": AvatarState.CONTENTO.value}
-    else:
+        reaction = await _generate_completion_reaction(session_id, "tarea", "Tarea completada")
+        return {"completed": True, "message": reaction, "avatar_state": AvatarState.CONTENTO.value}
+    elif item_type == "habit":
         ok = await complete_habit(session_id, item_id)
         if not ok:
             return problem_details(
@@ -661,11 +712,54 @@ async def complete_item(
                 instance=str(request.url),
             )
         habit = await get_habit(session_id, item_id)
+        reaction = await _generate_completion_reaction(session_id, "hábito", f"{habit.name} ({habit.done_this_week}/{habit.target_per_week} esta semana)")
         return {
             "completed": True,
-            "message": f"¡Hábito registrado! Llevas {habit.done_this_week}/{habit.target_per_week} esta semana 💪",
+            "message": reaction,
             "avatar_state": AvatarState.CONTENTO.value,
         }
+    else:  # block or reminder
+        ok = await complete_block(session_id, item_id)
+        if not ok:
+            return problem_details(
+                status=404,
+                title="Not Found",
+                detail="Bloque/recordatorio no encontrado o no pertenece a tu sesión",
+                instance=str(request.url),
+            )
+        reaction = await _generate_completion_reaction(session_id, "bloque", "Bloque completado")
+        return {"completed": True, "message": reaction, "avatar_state": AvatarState.CONTENTO.value}
+
+
+@app.delete("/api/v1/items/{item_type}/{item_id}")
+async def delete_item(
+    request: Request,
+    response: Response,
+    item_type: str,
+    item_id: int,
+    session_id: str = Depends(get_or_create_session_id),
+):
+    """
+    Elimina un bloque o recordatorio (protegido contra BOLA).
+    item_type: "block" | "reminder"
+    """
+    if item_type not in ("block", "reminder"):
+        return problem_details(
+            status=400,
+            title="Bad Request",
+            detail="item_type debe ser 'block' o 'reminder'",
+            instance=str(request.url),
+        )
+
+    ok = await delete_block(session_id, item_id)
+    if not ok:
+        return problem_details(
+            status=404,
+            title="Not Found",
+            detail="Bloque/recordatorio no encontrado o no pertenece a tu sesión",
+            instance=str(request.url),
+        )
+    return {"deleted": True, "message": "Bloque/recordatorio eliminado"}
 
 
 @app.post("/api/v1/proactive/trigger")
@@ -675,13 +769,86 @@ async def trigger_proactive(
     trigger_req: ProactiveTriggerRequest,
     session_id: str = Depends(get_or_create_session_id),
 ):
-    """Dispara un aviso proactivo por SSE (para demo/reclutador)."""
+    """Dispara un aviso proactivo por SSE (para demo/reclutador).
+    Toma el próximo evento real de la sesión; si no hay, responde "No hay eventos próximos para avisar"."""
     scheduler = get_scheduler()
-    message = await scheduler.trigger_proactive(trigger_req)
+
+    # Obtener próximo evento real de la sesión
+    from .database import list_upcoming_blocks, get_upcoming_memory_events
+    blocks = await list_upcoming_blocks(session_id, limit=1)
+    memories = await get_upcoming_memory_events(session_id, days_ahead=7)
+
+    next_event = None
+    if blocks:
+        next_event = {"title": blocks[0].title, "time": blocks[0].start_utc, "type": "block"}
+    elif memories:
+        next_event = {"title": memories[0].fact_value, "date": memories[0].event_date, "type": "memory"}
+
+    if not next_event:
+        return {"triggered": False, "message": "No hay eventos próximos para avisar"}
+
+    # Generar mensaje con LLM
+    from .agent import LLMClient
+    from .prompts import arm_contexto, get_system_prompt
+    from .database import list_memories, list_habits, list_upcoming_blocks as list_upcoming_blocks_db, get_session as get_db_session
+    from .models import Tone
+    from datetime import datetime, timezone
+
+    db_session = await get_db_session(session_id)
+    tone = db_session.tone.value if db_session else "amable"
+
+    now = datetime.now(timezone.utc)
+    memories_list = await list_memories(session_id)
+    habits_list = await list_habits(session_id)
+    blocks_list = await list_upcoming_blocks_db(session_id, limit=30)
+    upcoming_memories = await get_upcoming_memory_events(session_id, days_ahead=7)
+
+    ctx = arm_contexto(
+        session_id,
+        memories=[m.model_dump(mode="json") for m in memories_list],
+        habits=[h.model_dump(mode="json") for h in habits_list],
+        blocks=[b.model_dump(mode="json") for b in blocks_list],
+        upcoming_memories=[m.model_dump(mode="json") for m in upcoming_memories],
+        now=now,
+        tone=tone,
+    )
+
+    system_prompt = get_system_prompt(tone)
+
+    event_desc = ""
+    if next_event["type"] == "block":
+        dt = datetime.fromisoformat(next_event["time"].replace("Z", "+00:00"))
+        event_desc = f"Próximo evento: {next_event['title']} a las {dt.strftime('%H:%M')} hs"
+    else:
+        event_desc = f"Próximo recordatorio: {next_event['title']} ({next_event['date']})"
+
+    prompt = f"""Generá un mensaje proactivo corto (máx 2 frases) para avisar sobre:
+{event_desc}
+
+Contexto:
+{ctx['memoria']}
+{ctx['agenda']}
+{ctx['fecha_hora']}
+{ctx['dias']}
+
+Tono: {tone}.
+Natural, como un amigo que avisa. No saludes genéricos."""
+
+    llm = LLMClient()
+    message = "Próximo evento detectado"
+    if llm.api_key:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"<user_data>{prompt}</user_data>"},
+        ]
+        resp = await llm.chat(messages, [])
+        if not resp.error and resp.content:
+            message = resp.content.strip()
+
     # Enviar a conexiones SSE activas
     await scheduler._broadcast_to_session(session_id, type('obj', (object,), {
         'session_id': session_id,
-        'event_type': trigger_req.scenario,
+        'event_type': 'proactive_trigger',
         'message': message,
         'avatar_state': 'contento',
     })())

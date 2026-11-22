@@ -1,56 +1,21 @@
-"""Saludo determinístico al volver al usuario. Sin LLM, testeable."""
+"""Saludo generado por LLM con caché de 30 minutos por sesión."""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import Optional, Dict, Any
+import asyncio
 
-from typing import Optional
-
-
-MAX_GREETING_AGE_HOURS = 6  # Para la regla "vuelve después de 6h sin pending"
-
-
-def _format_time_utc(iso_str: Optional[str]) -> str:
-    """Formatea una fecha UTC en HH:MM."""
-    if not iso_str:
-        return "--:"
-    try:
-        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
-        return dt.strftime("%H:%M")
-    except Exception:
-        return "--:"
+from .agent import get_agent
+from .database import get_session as get_db_session
+from .models import Tone
 
 
-def _days_between(event_date: Optional[str], now_date: datetime) -> Optional[int]:
-    """Días entre event_date y now. Devuelve None si event_date es None o ya pasó."""
-    if not event_date:
-        return None
-    try:
-        event = datetime.strptime(event_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        delta = (event - now_date.date()).days
-        return delta if delta >= 0 else None
-    except Exception:
-        return None
+# Cache simple en memoria: session_id -> (greeting_dict, expires_at)
+_greeting_cache: Dict[str, tuple[dict, datetime]] = {}
+CACHE_TTL_SECONDS = 30 * 60  # 30 minutos
 
 
-def _hoy_paso_hora(preferred_time: str, now: datetime, today_str: str) -> bool:
-    """Devuelve True si ya pasó la hora preferida de hoy."""
-    try:
-        parts = preferred_time.split(":")
-        preferred_h = int(parts[0])
-        preferred_m = int(parts[1]) if len(parts) > 1 else 0
-        now_hour = now.hour
-        now_minute = now.minute
-        # Si la hora preferida ya pasó hoy
-        if now_hour > preferred_h:
-            return True
-        if now_hour == preferred_h and now_minute >= preferred_m:
-            return True
-        return False
-    except Exception:
-        return False
-
-
-def build_greeting(
+async def build_greeting(
     session,
     habits: list,
     blocks: list,
@@ -58,111 +23,112 @@ def build_greeting(
     now: datetime,
     tone: str = "amable",
 ) -> dict:
-    """Construye el saludo determinístico.
+    """Construye el saludo usando el LLM con prompt corto.
 
-    Reglas (primera que aplique):
-    1. Bloque o recordatorio que empieza en las próximas 2 h
-    2. Hábito que toca hoy y ya pasó su hora sin cumplimiento
-    3. Memory con event_date dentro de 7 días
-    4. Algo agendado para mañana
-    5. Usuario que vuelve (>6h sin pending) y sin pendientes
-    6. Sesión nueva
-
-    Siempre incluye display_name si está disponible.
-    Devuelve dict {text, avatar_state, reason}.
+    Cachea el resultado por sesión 30 minutos para no gastar tokens en cada recarga.
+    Si el LLM falla: "Hola, ¿en qué te ayudo?".
     """
+    global _greeting_cache
 
+    session_id = getattr(session, "session_id", None) if session else None
     display_name = getattr(session, "display_name", None) if session else None
-    last_seen_iso = getattr(session, "last_seen_utc", None) if session else None
 
-    # Helper: ¿hace más de MAX_GREETING_AGE_HOURS que no se ve la sesión?
-    hours_since_last = None
-    if last_seen_iso:
-        try:
-            last_dt = datetime.fromisoformat(last_seen_iso.replace("Z", "+00:00"))
-            delta = now - last_dt
-            hours_since_last = delta.total_seconds() / 3600
-        except Exception:
-            hours_since_last = None
+    # Verificar caché
+    if session_id and session_id in _greeting_cache:
+        cached_greeting, expires_at = _greeting_cache[session_id]
+        if now < expires_at:
+            return cached_greeting
 
-    # Regla 1: Bloque o recordatorio que empieza en las próximas 2 horas
-    two_hours_from_now = now + timedelta(hours=2)
-    for block in blocks:
-        try:
-            from datetime import datetime as _dt
-            block_start = _dt.fromisoformat(block.start_utc.replace("Z", "+00:00"))
-            if block_start <= two_hours_from_now and block_start >= now:
-                title = block.title
-                hhmm = _format_time_utc(block.start_utc)
-                text = f"En un rato tenés {title} ({hhmm} hs)."
-                avatar_state = "contento"
-                if display_name:
-                    text = f"¡Hola, {display_name}! {text}"
-                return {"text": text, "avatar_state": avatar_state, "reason": "bloque_proximo"}
-        except Exception:
+    # Construir prompt corto para el LLM
+    # Formatear agenda resumida
+    agenda_lines = []
+    for h in habits:
+        agenda_lines.append(f"- Hábito {h.get('name', '')}: {h.get('done_this_week', 0)}/{h.get('target_per_week', 3)} esta semana a las {h.get('preferred_time', '19:00')}")
+
+    today = now.date()
+    for b in blocks:
+        start = _parse_iso(b.get("start_utc", ""))
+        if start is None:
             continue
-
-    # Regla 2: Hábito que toca hoy y ya pasó su hora sin cumplimiento
-    today_str = now.strftime("%Y-%m-%d")
-    for habit in habits:
-        if habit.preferred_time and _hoy_paso_hora(habit.preferred_time, now, today_str) and not habit.completed:
-            text = f"¿Fuiste hoy {habit.name}?"
-            avatar_state = "serio" if tone == "firme" else "contento"
-            if display_name:
-                text = f"¡Hola, {display_name}! {text}"
-            return {"text": text, "avatar_state": avatar_state, "reason": "hábito_pendiente_hoy"}
-
-    # Regla 3: Memory con event_date dentro de 7 días
-    for memory in memories:
-        delta = _days_between(memory.event_date, now)
-        if delta is not None and 0 <= delta <= 7:
-            if delta == 1:
-                texto_día = "mañana"
-            elif delta == 0:
-                texto_día = "hoy"
-            else:
-                texto_día = f"faltan {delta} días"
-            text = f"{texto_día} para {memory.fact_value}."
-            avatar_state = "contento"
-            if display_name:
-                text = f"¡Hola, {display_name}! {text}"
-            return {"text": text, "avatar_state": avatar_state, "reason": "memory_proxima"}
-
-    # Regla 4: Algo agendado para mañana
-    tomorrow = now + timedelta(days=1)
-    tomorrow_start = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
-    tomorrow_end = tomorrow_start + timedelta(days=1)
-    for block in blocks:
-        try:
-            from datetime import datetime as _dt
-            block_start = _dt.fromisoformat(block.start_utc.replace("Z", "+00:00"))
-            if block_start >= tomorrow_start and block_start < tomorrow_end:
-                title = block.title
-                hhmm = _format_time_utc(block.start_utc)
-                text = f"Mañana tenés {title} a las {hhmm} hs."
-                avatar_state = "contento"
-                if display_name:
-                    text = f"¡Hola, {display_name}! {text}"
-                return {"text": text, "avatar_state": avatar_state, "reason": "bloque_mañana"}
-        except Exception:
+        delta = (start.date() - today).days
+        if not 0 <= delta <= 7:
             continue
+        etiqueta = "hoy" if delta == 0 else "mañana" if delta == 1 else f"en {delta} días"
+        agenda_lines.append(f"- {b.get('title', '')} ({etiqueta} a las {start.strftime('%H:%M')} hs)")
 
-    # Regla 5: Usuario que vuelve (>6h sin pending) y sin pendientes
-    if hours_since_last is not None and hours_since_last > MAX_GREETING_AGE_HOURS:
-        # Revisar si hay hábitos pendientes o bloques próximos
-        tiene_pendientes = any(
-            not h.completed for h in habits
-        ) or len(blocks) > 0
-        if not tiene_pendientes:
-            text = "¡Volviste! ¿En qué te doy una mano hoy?"
-            avatar_state = "contento"
-            if display_name:
-                text = f"¡Hola, {display_name}! {text}"
-            return {"text": text, "avatar_state": avatar_state, "reason": "vuelve_sin_pendientes"}
+    for m in memories[:7]:
+        agenda_lines.append(f"- Recordatorio: {m.get('fact_value', '')} ({m.get('event_date', '')})")
 
-    # Regla 6 (fallback): Sesión nueva
-    text = "¡Hola! Soy Mate. Contame tus rutinas, fechas importantes o pedime lo que necesites."
-    avatar_state = "contento"
+    agenda_text = "\n".join(agenda_lines) if agenda_lines else "(sin nada agendado)"
+
+    # Formatear hora actual en Córdoba
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("America/Argentina/Cordoba")
+    now_local = now.astimezone(tz)
+    dias_semana = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    dia = dias_semana[now_local.weekday()]
+    hora_actual = now_local.strftime("%H:%M")
+    fecha_actual = f"{dia} {now_local.strftime('%d de %B de %Y')}"
+
+    # Prompt para el saludo
+    greeting_prompt = f"""Saludá al usuario en una frase según la hora ({hora_actual}) y lo que tiene próximo en la agenda:
+{agenda_text}
+
+Si no hay nada agendado, presentate en una frase y preguntá en qué lo ayudás.
+Tono: {tone} (amable = cálido, firme = directo).
+{'Usuario: ' + display_name if display_name else ''}"""
+
+    try:
+        # Usar el agente para generar el saludo
+        if session_id:
+            agent = get_agent(session_id, Tone(tone))
+            # Construir mensajes mínimos para el saludo
+            messages = [
+                {"role": "system", "content": agent._get_system_prompt()},
+                {"role": "user", "content": f"<user_data>{greeting_prompt}</user_data>"},
+            ]
+
+            # Llamar al LLM directamente (sin tool calls)
+            resp = await agent.llm.chat(messages, [])
+
+            if resp.error or not resp.content:
+                raise Exception(resp.error or "No content")
+
+            greeting_text = resp.content.strip()
+
+            result = {
+                "text": greeting_text,
+                "avatar_state": "contento",
+                "reason": "llm_greeting",
+            }
+
+            # Guardar en caché
+            _greeting_cache[session_id] = (result, now + timedelta(seconds=CACHE_TTL_SECONDS))
+            return result
+    except Exception:
+        pass
+
+    # Fallback si falla el LLM
+    fallback = "Hola, ¿en qué te ayudo?"
     if display_name:
-        text = f"¡Hola, {display_name}! {text}"
-    return {"text": text, "avatar_state": avatar_state, "reason": "nueva_sesión"}
+        fallback = f"¡Hola, {display_name}! {fallback}"
+
+    return {
+        "text": fallback,
+        "avatar_state": "contento",
+        "reason": "fallback",
+    }
+
+
+def _parse_iso(iso_str: str) -> Optional[datetime]:
+    try:
+        dt = datetime.fromisoformat(str(iso_str).replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def clear_greeting_cache(session_id: str) -> None:
+    """Limpia la caché de saludo para una sesión (útil al cambiar tono o datos)."""
+    if session_id in _greeting_cache:
+        del _greeting_cache[session_id]

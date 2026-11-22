@@ -122,6 +122,7 @@ CREATE TABLE IF NOT EXISTS calendar_blocks (
     start_utc TEXT NOT NULL,
     end_utc TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT 'estudio',
+    completed INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY(session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
 );
 
@@ -152,6 +153,12 @@ async def init_db() -> None:
             await conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
         if "category" not in columns:
             await conn.execute("ALTER TABLE tasks ADD COLUMN category TEXT")
+
+        # Add completed column to calendar_blocks if not exists
+        cursor = await conn.execute("PRAGMA table_info(calendar_blocks)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "completed" not in columns:
+            await conn.execute("ALTER TABLE calendar_blocks ADD COLUMN completed INTEGER NOT NULL DEFAULT 0")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -637,6 +644,44 @@ async def get_block(session_id: str, block_id: int) -> Optional[CalendarBlockRea
             start_utc=parse_utc(row["start_utc"]),
             end_utc=parse_utc(row["end_utc"]),
             category=Category(row["category"]),
+        )
+
+
+async def complete_block(session_id: str, block_id: int) -> bool:
+    """Marca un bloque de calendario (o recordatorio) como completado."""
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "UPDATE calendar_blocks SET completed = 1 WHERE id = ? AND session_id = ?", (block_id, session_id)
+        )
+        return cur.rowcount > 0
+
+
+async def delete_block(session_id: str, block_id: int) -> bool:
+    """Elimina un bloque de calendario (o recordatorio) - BOLA protected."""
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "DELETE FROM calendar_blocks WHERE id = ? AND session_id = ?", (block_id, session_id)
+        )
+        return cur.rowcount > 0
+
+
+async def get_block_with_completed(session_id: str, block_id: int) -> Optional[CalendarBlockRead]:
+    """Obtiene un bloque incluyendo el campo completed."""
+    async with get_connection() as conn:
+        row = await conn.execute(
+            "SELECT * FROM calendar_blocks WHERE id = ? AND session_id = ?", (block_id, session_id)
+        )
+        row = await row.fetchone()
+        if not row:
+            return None
+        return CalendarBlockRead(
+            id=row["id"],
+            session_id=row["session_id"],
+            title=row["title"],
+            start_utc=parse_utc(row["start_utc"]),
+            end_utc=parse_utc(row["end_utc"]),
+            category=Category(row["category"]),
+            completed=bool(row["completed"]),
         )
 
 

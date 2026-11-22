@@ -151,14 +151,14 @@ class TestAssistantV2:
         now = datetime(2026, 11, 18, 10, 0, 0, tzinfo=timezone.utc)
 
         # Test with no data - should return nueva_sesión greeting
-        greeting = build_greeting(None, [], [], [], now, tone="amable")
+        greeting = await build_greeting(None, [], [], [], now, tone="amable")
         assert "text" in greeting
         assert "avatar_state" in greeting
         assert "reason" in greeting
         assert greeting["avatar_state"] == "contento"
 
         # Test with display_name
-        greeting = build_greeting(None, [], [], [], now, tone="amable")
+        greeting = await build_greeting(None, [], [], [], now, tone="amable")
         # Should work without session
         assert greeting is not None
 
@@ -448,3 +448,57 @@ class TestAssistantV2:
                 assert all(t["success"] for t in data["tools_executed"])
                 assert data["tools_executed"][0]["name"] == "crear_tarea"
                 assert data["tools_executed"][1]["name"] == "crear_tarea"
+
+
+class TestNoPredefinedContent:
+    """Tests para verificar que no hay contenido predefinido en el código fuente."""
+
+    def test_no_forbidden_words_in_src(self):
+        """Busca en src/ (fuera de tests) las palabras prohibidas y falla si aparecen."""
+        import os
+        from pathlib import Path
+
+        forbidden = ["gym", "gimnasio", "cumple", "Bien ahí"]
+        src_dir = Path(__file__).parent.parent / "src"
+
+        violations = []
+        for py_file in src_dir.rglob("*.py"):
+            if "test" in str(py_file):
+                continue
+            content = py_file.read_text(encoding="utf-8")
+            for word in forbidden:
+                if word.lower() in content.lower():
+                    violations.append(f"{py_file.relative_to(src_dir)}: contiene '{word}'")
+
+        assert not violations, "Palabras prohibidas encontradas en src/:\n" + "\n".join(violations)
+
+    def test_dias_block_in_context(self):
+        """Verifica que el bloque <dias> está en el contexto armado para el LLM."""
+        from mate_api.prompts import arm_contexto
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        ctx = arm_contexto(
+            session_id="test",
+            memories=[],
+            habits=[],
+            blocks=[],
+            upcoming_memories=[],
+            now=now,
+            tone="amable",
+        )
+
+        # Verificar que existe el bloque <dias>
+        assert "dias" in ctx, "Falta clave 'dias' en el contexto"
+        assert "<dias>" in ctx["dias"], "Falta etiqueta <dias> en el bloque"
+        assert "</dias>" in ctx["dias"], "Falta etiqueta de cierre </dias>"
+
+        # Verificar que contiene hoy y los 7 días siguientes
+        dias_content = ctx["dias"]
+        assert "hoy =" in dias_content.lower(), "Falta 'hoy =' en <dias>"
+        assert "mañana =" in dias_content.lower(), "Falta 'mañana =' en <dias>"
+        assert "pasado mañana =" in dias_content.lower(), "Falta 'pasado mañana =' en <dias>"
+
+        # Verificar que también está en el system prompt combinado
+        full_context = "\n\n".join([ctx["system_prompt"], ctx["memoria"], ctx["agenda"], ctx["fecha_hora"], ctx["dias"]])
+        assert "<dias>" in full_context, "Bloque <dias> no está en el contexto completo enviado al LLM"

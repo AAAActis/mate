@@ -72,10 +72,50 @@ class CrearRecordatorioResult(BaseModel):
 # Implementación de las 8 herramientas
 # ──────────────────────────────────────────────────────────────────────
 
+def _normalize_title(title: str) -> str:
+    """Normaliza título para comparación: lowercase, sin acentos, sin puntuación extra."""
+    import unicodedata
+    normalized = unicodedata.normalize('NFD', title.lower())
+    normalized = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+    normalized = ''.join(c for c in normalized if c.isalnum() or c.isspace())
+    return ' '.join(normalized.split())
+
+
 async def tool_crear_tarea(session_id: str, args: dict) -> ToolResult:
-    """1. Crear una tarea con título, hora opcional (HH:MM), fecha opcional (YYYY-MM-DD) y categoría opcional."""
+    """1. Crear una tarea con título, hora opcional (HH:MM), fecha opcional (YYYY-MM-DD) y categoría opcional.
+    Si ya existe una tarea con mismo título normalizado en la misma fecha, devuelve la existente."""
     try:
         validated = CrearTareaArgs(**args)
+
+        # Verificar duplicado por título normalizado + fecha
+        if validated.fecha_sugerida:
+            from .database import get_connection
+            norm_title = _normalize_title(validated.titulo)
+            async with get_connection() as conn:
+                rows = await conn.execute(
+                    """
+                    SELECT id, title, due_date, due_time, category, completed, created_at_utc
+                    FROM tasks
+                    WHERE session_id = ? AND due_date = ?
+                    """,
+                    (session_id, validated.fecha_sugerida),
+                )
+                rows = await rows.fetchall()
+                for row in rows:
+                    if _normalize_title(row["title"]) == norm_title:
+                        # Ya existe, devolver la existente
+                        from .models import TaskRead, Category as CategoryModel
+                        return ToolResult(success=True, data=TaskRead(
+                            id=row["id"],
+                            session_id=session_id,
+                            title=row["title"],
+                            due_time=row["due_time"],
+                            due_date=row["due_date"],
+                            category=CategoryModel(row["category"]) if row["category"] else None,
+                            completed=bool(row["completed"]),
+                            created_at_utc=row["created_at_utc"],
+                        ).model_dump())
+
         task = await create_task(
             session_id,
             validated.titulo,
@@ -115,7 +155,7 @@ async def tool_listar_hoy(session_id: str, args: dict) -> ToolResult:
 
 
 async def tool_crear_habito(session_id: str, args: dict) -> ToolResult:
-    """3. Registra un hábito (ej. gym, estudio)."""
+    """3. Registra un hábito recurrente."""
     try:
         validated = CrearHabitoArgs(**args)
         habit = await create_habit(
@@ -192,9 +232,39 @@ async def tool_reservar_bloque(session_id: str, args: dict) -> ToolResult:
 
 
 async def tool_crear_recordatorio(session_id: str, args: dict) -> ToolResult:
-    """7. Crea un bloque tipo recordatorio y, si es evento especial, registra memoria para avisar 7 días antes."""
+    """7. Crea un bloque tipo recordatorio y, si es evento especial, registra memoria para avisar 7 días antes.
+    Si ya existe un recordatorio con mismo título normalizado en la misma fecha, devuelve el existente."""
     try:
         validated = CrearRecordatorioArgs(**args)
+
+        # Verificar duplicado por título normalizado + fecha (en bloques tipo recordatorio)
+        norm_title = _normalize_title(validated.titulo)
+        from .database import get_connection
+        async with get_connection() as conn:
+            rows = await conn.execute(
+                """
+                SELECT id, title, start_utc, end_utc, category, completed
+                FROM calendar_blocks
+                WHERE session_id = ? AND category = 'recordatorio'
+                """,
+                (session_id,),
+            )
+            rows = await rows.fetchall()
+            for row in rows:
+                block_date = row["start_utc"][:10]  # YYYY-MM-DD
+                if block_date == validated.fecha_iso and _normalize_title(row["title"]) == norm_title:
+                    # Ya existe, devolver el existente
+                    from .models import CalendarBlockRead, Category as CategoryModel
+                    return ToolResult(success=True, data=CalendarBlockRead(
+                        id=row["id"],
+                        session_id=session_id,
+                        title=row["title"],
+                        start_utc=row["start_utc"],
+                        end_utc=row["end_utc"],
+                        category=CategoryModel(row["category"]),
+                        completed=bool(row["completed"]),
+                    ).model_dump())
+
         # Crear bloque en calendario (categoría recordatorio)
         # Combinar fecha + hora en ISO UTC
         inicio_iso = f"{validated.fecha_iso}T{validated.hora}:00+00:00"
@@ -211,9 +281,9 @@ async def tool_crear_recordatorio(session_id: str, args: dict) -> ToolResult:
             Category.RECORDATORIO,
         )
 
-        # Si parece un cumpleaños/evento especial, guardar en memoria con fecha_evento
+        # Si parece un evento especial, guardar en memoria con fecha_evento
         memory = None
-        keywords = ["cumple", "cumpleaños", "aniversario", "aniversari", "evento", "cita", "reunion", "reunión"]
+        keywords = ["aniversario", "aniversari", "evento", "cita", "reunion", "reunión"]
         if any(kw in validated.titulo.lower() for kw in keywords):
             mem = await create_memory(
                 session_id,
@@ -295,7 +365,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "reservar_bloque",
-            "description": "Agenda un bloque en el calendario con título, inicio/fin ISO 8601 UTC y categoría (estudio|gym|personal). Verifica no solapamiento.",
+            "description": "Agenda un bloque en el calendario con título, inicio/fin ISO 8601 UTC y categoría (estudio|trabajo|deporte|social|personal|recordatorio). Verifica no solapamiento.",
             "parameters": ReservarBloqueArgs.model_json_schema(),
         },
     },
@@ -303,7 +373,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "crear_recordatorio",
-            "description": "Crea un bloque tipo recordatorio en el calendario. Si detecta palabras clave de evento especial (cumpleaños, aniversario), también lo guarda en memoria para avisar 7 días antes.",
+            "description": "Crea un bloque tipo recordatorio en el calendario. Si detecta palabras clave de evento especial (aniversario, evento), también lo guarda en memoria para avisar 7 días antes.",
             "parameters": CrearRecordatorioArgs.model_json_schema(),
         },
     },

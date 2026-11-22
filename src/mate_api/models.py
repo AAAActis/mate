@@ -19,7 +19,9 @@ class Tone(str, Enum):
 
 class Category(str, Enum):
     ESTUDIO = "estudio"
-    GYM = "gym"
+    TRABAJO = "trabajo"
+    DEPORTE = "deporte"
+    SOCIAL = "social"
     PERSONAL = "personal"
     RECORDATORIO = "recordatorio"
 
@@ -91,6 +93,7 @@ class CalendarBlockBase(BaseModel):
     start_utc: datetime
     end_utc: datetime
     category: Category = Category.ESTUDIO
+    completed: bool = False
 
 
 class CalendarBlockCreate(CalendarBlockBase):
@@ -214,7 +217,7 @@ class ToneResponse(BaseModel):
 
 
 class ProactiveTriggerRequest(BaseModel):
-    scenario: Literal["gym", "estudio", "cumple"]
+    scenario: Literal["proximo_evento"]
 
 
 class ProactiveTriggerResponse(BaseModel):

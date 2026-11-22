@@ -134,7 +134,9 @@ def build_ics(
             # Icono según categoría
             icons = {
                 Category.ESTUDIO: "📚",
-                Category.GYM: "💪",
+                Category.TRABAJO: "💼",
+                Category.DEPORTE: "💪",
+                Category.SOCIAL: "👥",
                 Category.PERSONAL: "👤",
                 Category.RECORDATORIO: "🔔",
             }
@@ -169,7 +171,7 @@ def build_ics(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Generador para recordatorios especiales (cumpleaños, etc.)
+# Generador para recordatorios especiales (aniversarios, etc.)
 # ──────────────────────────────────────────────────────────────────────
 
 def build_reminder_ics(
@@ -180,7 +182,7 @@ def build_reminder_ics(
     reminder_days_before: int = 7,
 ) -> str:
     """
-    Genera un .ics para un recordatorio de evento especial (cumpleaños, aniversario).
+    Genera un .ics para un recordatorio de evento especial (aniversario, evento).
     Incluye alarma a los N días antes y el día del evento.
     """
     lines = [

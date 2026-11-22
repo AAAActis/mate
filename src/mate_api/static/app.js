@@ -352,7 +352,8 @@ function pintarAgenda() {
 
 function hhmm(iso) {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('es-AR', { timeZone: CORDOBA_TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
 }
 
 function itemAgenda(titulo, meta, completar, hecho) {
