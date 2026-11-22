@@ -175,3 +175,8 @@
 .mate .m-repujado-linea { fill: none; stroke: var(--m-gourd-shade); stroke-width: 2; stroke-linecap: round; }
 .mate .m-pata { fill: var(--m-gourd); stroke: var(--m-ink); stroke-width: 3; stroke-linejoin: round; }
 .mate .m-flecos { fill: none; stroke: var(--m-ink); stroke-width: 2; stroke-linecap: round; }
+
+/* sombreado sin recortes: sombra a la derecha + tapa del color del cuerpo + contorno */
+.mate .m-sombra-base { fill: var(--m-gourd-shade); opacity: .6; }
+.mate .m-tapa-sombra { fill: var(--m-gourd); }
+.mate .m-contorno { fill: none; stroke: var(--m-ink); stroke-width: 3.5; stroke-linejoin: round; }

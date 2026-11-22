@@ -158,13 +158,6 @@
 
           <!-- SVG del Mate con vapor, mirada y 5 formas (clasica, galleta, torpedo, imperial, camionero) -->
           <svg id="mate" class="mate" data-state="neutro" viewBox="0 0 240 270" role="img" aria-label="Mate, tu asistente">
-  <defs>
-    <clipPath id="mate-clip-clasica"><path d="M76 98 C46 112 30 146 32 180 C34 226 72 252 120 252 C168 252 206 226 208 180 C210 146 194 112 164 98 Z"/></clipPath>
-    <clipPath id="mate-clip-camionero"><path d="M44 112 C30 130 28 166 32 196 C36 228 72 246 120 248 C168 246 204 228 208 196 C212 166 210 130 196 112 Z"/></clipPath>
-    <clipPath id="mate-clip-torpedo"><path d="M70 112 C44 124 36 160 40 190 C44 222 76 244 120 248 C164 244 196 222 200 190 C204 160 196 124 170 112 Z"/></clipPath>
-    <clipPath id="mate-clip-imperial"><path d="M64 114 C52 130 48 160 50 190 C52 222 80 240 120 242 C160 240 188 222 190 190 C192 160 188 130 176 114 Z"/></clipPath>
-    <clipPath id="mate-clip-galleta"><path d="M70 102 C32 110 18 146 22 176 C26 212 66 234 120 234 C174 234 214 212 218 176 C222 146 208 110 170 102 Z"/></clipPath>
-  </defs>
 
   <!-- sombra en el piso -->
   <ellipse class="m-piso" cx="120" cy="258" rx="74" ry="7"/>
@@ -197,27 +190,37 @@
   <path class="m-cuerpo f-torpedo"   d="M70 112 C44 124 36 160 40 190 C44 222 76 244 120 248 C164 244 196 222 200 190 C204 160 196 124 170 112 Z"/>
   <path class="m-cuerpo f-imperial"  d="M64 114 C52 130 48 160 50 190 C52 222 80 240 120 242 C160 240 188 222 190 190 C192 160 188 130 176 114 Z"/>
   <path class="m-cuerpo f-galleta"   d="M70 102 C32 110 18 146 22 176 C26 212 66 234 120 234 C174 234 214 212 218 176 C222 146 208 110 170 102 Z"/>
-  <g class="m-extra m-sombreado f-clasica" clip-path="url(#mate-clip-clasica)">
-    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z"/>
-    <path class="m-sombra" d="M178 118 C202 148 204 200 170 236 C186 230 210 204 206 168 C204 146 196 128 178 118 Z"/>
-  </g>
-  <g class="m-extra m-sombreado f-camionero" clip-path="url(#mate-clip-camionero)">
-    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z"/>
-    <path class="m-sombra" d="M178 118 C202 148 204 200 170 236 C186 230 210 204 206 168 C204 146 196 128 178 118 Z"/>
-  </g>
-  <g class="m-extra m-sombreado f-torpedo" clip-path="url(#mate-clip-torpedo)">
-    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z"/>
-    <path class="m-sombra" d="M178 118 C202 148 204 200 170 236 C186 230 210 204 206 168 C204 146 196 128 178 118 Z"/>
-  </g>
-  <g class="m-extra m-sombreado f-imperial" clip-path="url(#mate-clip-imperial)">
-    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z"/>
-    <path class="m-sombra" d="M178 118 C202 148 204 200 170 236 C186 230 210 204 206 168 C204 146 196 128 178 118 Z"/>
-  </g>
-  <g class="m-extra m-sombreado f-galleta" clip-path="url(#mate-clip-galleta)">
-    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z"/>
-    <path class="m-sombra" d="M178 118 C202 148 204 200 170 236 C186 230 210 204 206 168 C204 146 196 128 178 118 Z"/>
-  </g>
 
+  <g class="m-extra m-sombreado f-clasica">
+    <path class="m-sombra-base" d="M76 98 C46 112 30 146 32 180 C34 226 72 252 120 252 C168 252 206 226 208 180 C210 146 194 112 164 98 Z"/>
+    <path class="m-tapa-sombra" d="M76 98 C46 112 30 146 32 180 C34 226 72 252 120 252 C168 252 206 226 208 180 C210 146 194 112 164 98 Z" transform="translate(31,0) scale(.9,1) translate(-31,0)"/>
+    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z" transform="translate(0,0)"/>
+    <path class="m-contorno" d="M76 98 C46 112 30 146 32 180 C34 226 72 252 120 252 C168 252 206 226 208 180 C210 146 194 112 164 98 Z"/>
+  </g>
+  <g class="m-extra m-sombreado f-camionero">
+    <path class="m-sombra-base" d="M44 112 C30 130 28 166 32 196 C36 228 72 246 120 248 C168 246 204 228 208 196 C212 166 210 130 196 112 Z"/>
+    <path class="m-tapa-sombra" d="M44 112 C30 130 28 166 32 196 C36 228 72 246 120 248 C168 246 204 228 208 196 C212 166 210 130 196 112 Z" transform="translate(27,0) scale(.9,1) translate(-27,0)"/>
+    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z" transform="translate(-2,0)"/>
+    <path class="m-contorno" d="M44 112 C30 130 28 166 32 196 C36 228 72 246 120 248 C168 246 204 228 208 196 C212 166 210 130 196 112 Z"/>
+  </g>
+  <g class="m-extra m-sombreado f-torpedo">
+    <path class="m-sombra-base" d="M70 112 C44 124 36 160 40 190 C44 222 76 244 120 248 C164 244 196 222 200 190 C204 160 196 124 170 112 Z"/>
+    <path class="m-tapa-sombra" d="M70 112 C44 124 36 160 40 190 C44 222 76 244 120 248 C164 244 196 222 200 190 C204 160 196 124 170 112 Z" transform="translate(40,0) scale(.9,1) translate(-40,0)"/>
+    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z" transform="translate(10,6)"/>
+    <path class="m-contorno" d="M70 112 C44 124 36 160 40 190 C44 222 76 244 120 248 C164 244 196 222 200 190 C204 160 196 124 170 112 Z"/>
+  </g>
+  <g class="m-extra m-sombreado f-imperial">
+    <path class="m-sombra-base" d="M64 114 C52 130 48 160 50 190 C52 222 80 240 120 242 C160 240 188 222 190 190 C192 160 188 130 176 114 Z"/>
+    <path class="m-tapa-sombra" d="M64 114 C52 130 48 160 50 190 C52 222 80 240 120 242 C160 240 188 222 190 190 C192 160 188 130 176 114 Z" transform="translate(49,0) scale(.9,1) translate(-49,0)"/>
+    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z" transform="translate(14,10)"/>
+    <path class="m-contorno" d="M64 114 C52 130 48 160 50 190 C52 222 80 240 120 242 C160 240 188 222 190 190 C192 160 188 130 176 114 Z"/>
+  </g>
+  <g class="m-extra m-sombreado f-galleta">
+    <path class="m-sombra-base" d="M70 102 C32 110 18 146 22 176 C26 212 66 234 120 234 C174 234 214 212 218 176 C222 146 208 110 170 102 Z"/>
+    <path class="m-tapa-sombra" d="M70 102 C32 110 18 146 22 176 C26 212 66 234 120 234 C174 234 214 212 218 176 C222 146 208 110 170 102 Z" transform="translate(21,0) scale(.9,1) translate(-21,0)"/>
+    <path class="m-luz" d="M62 128 C48 148 44 176 50 200 C54 186 58 156 72 134 Z" transform="translate(-4,-2)"/>
+    <path class="m-contorno" d="M70 102 C32 110 18 146 22 176 C26 212 66 234 120 234 C174 234 214 212 218 176 C222 146 208 110 170 102 Z"/>
+  </g>
   <!-- detalles según la forma -->
   <g class="m-extra f-camionero">
     <path class="m-banda" d="M40 98 L200 98 L200 118 Q120 132 40 118 Z"/>
@@ -236,9 +239,6 @@
     <path class="m-banda-linea" d="M58 100 Q120 112 182 100 M58 118 Q120 130 182 118"/>
     <path class="m-grabado-onda" d="M62 110 q8 -6 16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0 t16 0"/>
     <path class="m-pata" d="M80 234 C78 248 84 258 90 256 C95 254 96 244 98 238 Z M112 240 C110 254 116 264 120 264 C124 264 130 254 128 240 Z M142 238 C144 244 145 254 150 256 C156 258 162 248 160 234 Z"/>
-  </g>
-  <g class="m-extra f-galleta">
-    <path class="m-costura" d="M30 150 Q120 132 210 150"/>
   </g>
 
   <!-- vapor (sube suave desde la yerba) -->
