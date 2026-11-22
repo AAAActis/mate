@@ -13,6 +13,8 @@
   --m-tongue: #e07f70;
   --m-cheek: #e8907a;
   --m-spark: #6a8a3a;
+  --m-face: var(--m-ink);
+  --m-vapor: rgba(255, 255, 255, .85);
   width: 300px;
   max-width: 100%;
   height: auto;
@@ -36,9 +38,9 @@
 .mate .m-anillo { fill: var(--m-alpaca-dark); stroke: var(--m-ink); stroke-width: 2; }
 .mate .m-boquilla { fill: var(--m-alpaca); stroke: var(--m-ink); stroke-width: 2.5; stroke-linejoin: round; }
 .mate .m-mejilla { fill: var(--m-cheek); opacity: .6; }
-.mate .m-ojo circle { fill: var(--m-ink); }
+.mate .m-ojo circle { fill: var(--m-face); }
 .mate .m-ojo .m-brillo { fill: #fff; }
-.mate .m-trazo { fill: none; stroke: var(--m-ink); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
+.mate .m-trazo { fill: none; stroke: var(--m-face); stroke-width: 4.5; stroke-linecap: round; stroke-linejoin: round; }
 .mate .m-boca-fondo { fill: var(--m-mouth); stroke: var(--m-ink); stroke-width: 3; stroke-linejoin: round; }
 .mate .m-lengua { fill: var(--m-tongue); }
 .mate .m-brazo { fill: none; stroke: var(--m-ink); stroke-width: 5; stroke-linecap: round; }
@@ -107,3 +109,28 @@
 @media (prefers-reduced-motion: reduce) {
   .mate, .mate * { animation: none !important; }
 }
+
+/* ---------- vapor ---------- */
+.mate .m-vapor path { fill: none; stroke: var(--m-vapor); stroke-width: 4; stroke-linecap: round; opacity: 0; }
+.mate .m-vapor path { animation: m-vapor 4.5s ease-in-out infinite; }
+.mate .m-vapor path:nth-child(2) { animation-delay: 1.5s; }
+.mate .m-vapor path:nth-child(3) { animation-delay: 3s; }
+@keyframes m-vapor {
+  0%   { opacity: 0; transform: translateY(8px); }
+  30%  { opacity: .75; }
+  100% { opacity: 0; transform: translateY(-14px); }
+}
+
+/* ---------- mirada que sigue el mouse (la mueve escena.js) ---------- */
+.mate .m-mirada { transition: transform .12s ease-out; }
+
+/* ---------- saltito al hacer clic ---------- */
+.mate.salta { animation: m-salto .55s cubic-bezier(.22, 1, .36, 1) 1; }
+.mate { cursor: pointer; }
+
+/* ---------- personalización: calabaza ---------- */
+.mate[data-calabaza="madera"] { --m-gourd: #c08a52; --m-gourd-light: #d9a873; --m-gourd-shade: #8f6136; }
+.mate[data-calabaza="negra"]  { --m-gourd: #3d3532; --m-gourd-light: #5c514c; --m-gourd-shade: #1f1a18; --m-face: #f3ead8; --m-mouth: #1a1210; }
+.mate[data-calabaza="ceramica"] { --m-gourd: #5f7f4a; --m-gourd-light: #7f9e67; --m-gourd-shade: #3f5a30; }
+/* ---------- personalización: virola ---------- */
+.mate[data-virola="dorada"] { --m-alpaca: #e0c06a; --m-alpaca-dark: #b8953c; }
