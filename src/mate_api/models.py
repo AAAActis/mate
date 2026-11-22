@@ -15,6 +15,7 @@ FactValueStr = Annotated[str, StringConstraints(min_length=1, max_length=300, st
 class Tone(str, Enum):
     AMABLE = "amable"
     FIRME = "firme"
+    AUTOMATICO = "automatico"
 
 
 class Category(str, Enum):
@@ -37,6 +38,7 @@ class SessionBase(BaseModel):
     session_id: str
     ics_token: str
     tone: Tone = Tone.AMABLE
+    tone_mode: Tone = Tone.AUTOMATICO
     created_at_utc: datetime
     expires_at_utc: datetime
 
@@ -56,6 +58,7 @@ class TaskBase(BaseModel):
     due_time: Optional[str] = Field(default=None, pattern=r"^([01]?[0-9]|2[0-3]):[0-5][0-9]$")
     due_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     category: Optional[Category] = None
+    has_time: bool = True
 
 
 class TaskCreate(TaskBase):
@@ -94,6 +97,7 @@ class CalendarBlockBase(BaseModel):
     end_utc: datetime
     category: Category = Category.ESTUDIO
     completed: bool = False
+    has_time: bool = True
 
 
 class CalendarBlockCreate(CalendarBlockBase):
@@ -206,6 +210,7 @@ class ChatResponse(BaseModel):
     tools_executed: list[ToolResult] = Field(default_factory=list)
     state_snapshot: dict = Field(default_factory=dict)
     is_degraded: bool = False
+    tone_used: Optional[str] = None  # "amable" o "firme" (cuando tone_mode=automatico)
 
 
 class ToneRequest(BaseModel):
@@ -214,6 +219,14 @@ class ToneRequest(BaseModel):
 
 class ToneResponse(BaseModel):
     tone: Tone
+
+
+class ToneModeRequest(BaseModel):
+    tone_mode: Tone
+
+
+class ToneModeResponse(BaseModel):
+    tone_mode: Tone
 
 
 class ProactiveTriggerRequest(BaseModel):

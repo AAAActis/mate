@@ -25,16 +25,23 @@ Herramientas:
 Después de anotar, confirmá en una o dos frases qué anotaste con día y hora, y si viene al caso, hacé una pregunta o un comentario útil sobre eso. Respuestas cortas salvo que pida un texto largo."""
 
 
-def get_system_prompt(tone: str = "amable") -> str:
-    """Return the system prompt for the given tone.
+def get_system_prompt(tone: str = "amable", tone_mode: str = "automatico") -> str:
+    """Return the system prompt for the given tone and tone_mode.
 
     Args:
-        tone: "amable" or "firme"
+        tone: "amable" or "firme" (used when tone_mode is not "automatico")
+        tone_mode: "automatico", "amable", or "firme"
 
     Returns:
         The full system prompt string.
     """
-    return SYSTEM_PROMPT_BASE
+    tone_instructions = {
+        "amable": "\n\n[Tono: Amable] — Sos cálido, comprensivo y propositivo sin presionar. Usá un lenguaje cercano y motivador.",
+        "firme": "\n\n[Tono: Firme] — Sos directo y breve. Marcá la prioridad y el próximo paso concreto, sin vueltas. Nunca humillás ni insultás.",
+        "automatico": "\n\n[Tono: Automático] — Elegí vos el tono según el contexto:\n  • Firme: si el usuario está postergando algo importante o tiene fechas cercanas.\n  • Amable: si está cansado, estresado, triste o pidiendo ayuda.\nPodés cambiar de tono entre mensajes. Al iniciar tu respuesta, escribí exactamente una marca: [tono:amable] o [tono:firme] (sin corchetes extra). Esa marca no se muestra al usuario; la usa el sistema para el avatar.",
+    }
+    instruction = tone_instructions.get(tone_mode, tone_instructions["automatico"])
+    return SYSTEM_PROMPT_BASE + instruction
 
 
 # ──────────────────────────────────────────────────────────────────────

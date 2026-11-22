@@ -153,12 +153,22 @@ async def init_db() -> None:
             await conn.execute("ALTER TABLE tasks ADD COLUMN due_date TEXT")
         if "category" not in columns:
             await conn.execute("ALTER TABLE tasks ADD COLUMN category TEXT")
+        if "has_time" not in columns:
+            await conn.execute("ALTER TABLE tasks ADD COLUMN has_time INTEGER NOT NULL DEFAULT 1")
 
-        # Add completed column to calendar_blocks if not exists
+        # Add completed and has_time columns to calendar_blocks if not exists
         cursor = await conn.execute("PRAGMA table_info(calendar_blocks)")
         columns = [row[1] for row in await cursor.fetchall()]
         if "completed" not in columns:
             await conn.execute("ALTER TABLE calendar_blocks ADD COLUMN completed INTEGER NOT NULL DEFAULT 0")
+        if "has_time" not in columns:
+            await conn.execute("ALTER TABLE calendar_blocks ADD COLUMN has_time INTEGER NOT NULL DEFAULT 1")
+
+        # Add tone_mode column to sessions if not exists
+        cursor = await conn.execute("PRAGMA table_info(sessions)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "tone_mode" not in columns:
+            await conn.execute("ALTER TABLE sessions ADD COLUMN tone_mode TEXT NOT NULL DEFAULT 'automatico'")
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -182,21 +192,22 @@ def session_expires_at(hours: int = 720) -> str:
 # Sesiones (creación, obtención, borrado, rotación ics_token)
 # ──────────────────────────────────────────────────────────────────────
 
-async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMABLE) -> SessionRead:
+async def create_session(session_id: str, ics_token: str, tone: Tone = Tone.AMABLE, tone_mode: Tone = Tone.AUTOMATICO) -> SessionRead:
     now = utc_now_iso()
     expires = session_expires_at(get_settings().SESSION_TTL_HOURS)
     async with db_transaction() as conn:
         await conn.execute(
             """
-            INSERT INTO sessions (session_id, ics_token, tone, created_at_utc, expires_at_utc, last_seen_utc, display_name, messages_count_today)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (session_id, ics_token, tone, tone_mode, created_at_utc, expires_at_utc, last_seen_utc, display_name, messages_count_today)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (session_id, ics_token, tone.value, now, expires, now, None, 0),
+            (session_id, ics_token, tone.value, tone_mode.value, now, expires, now, None, 0),
         )
     return SessionRead(
         session_id=session_id,
         ics_token=ics_token,
         tone=tone,
+        tone_mode=tone_mode,
         created_at_utc=parse_utc(now),
         expires_at_utc=parse_utc(expires),
         last_seen_utc=parse_utc(now),
@@ -217,6 +228,7 @@ async def get_session(session_id: str) -> Optional[SessionRead]:
             session_id=row["session_id"],
             ics_token=row["ics_token"],
             tone=Tone(row["tone"]),
+            tone_mode=Tone(row["tone_mode"]) if "tone_mode" in row.keys() else Tone.AUTOMATICO,
             created_at_utc=parse_utc(row["created_at_utc"]),
             expires_at_utc=parse_utc(row["expires_at_utc"]),
             last_seen_utc=parse_utc(row["last_seen_utc"]) if row["last_seen_utc"] else None,
@@ -229,6 +241,14 @@ async def update_session_tone(session_id: str, tone: Tone) -> bool:
     async with db_transaction() as conn:
         cur = await conn.execute(
             "UPDATE sessions SET tone = ? WHERE session_id = ?", (tone.value, session_id)
+        )
+        return cur.rowcount > 0
+
+
+async def update_session_tone_mode(session_id: str, tone_mode: Tone) -> bool:
+    async with db_transaction() as conn:
+        cur = await conn.execute(
+            "UPDATE sessions SET tone_mode = ? WHERE session_id = ?", (tone_mode.value, session_id)
         )
         return cur.rowcount > 0
 
@@ -293,6 +313,7 @@ async def get_session_by_ics_token(ics_token: str) -> Optional[SessionRead]:
             session_id=row["session_id"],
             ics_token=row["ics_token"],
             tone=Tone(row["tone"]),
+            tone_mode=Tone(row["tone_mode"]) if "tone_mode" in row.keys() else Tone.AUTOMATICO,
             created_at_utc=parse_utc(row["created_at_utc"]),
             expires_at_utc=parse_utc(row["expires_at_utc"]),
             last_seen_utc=parse_utc(row["last_seen_utc"]) if row["last_seen_utc"] else None,
@@ -307,13 +328,14 @@ async def get_session_by_ics_token(ics_token: str) -> Optional[SessionRead]:
 
 async def create_task(session_id: str, title: str, due_time: Optional[str] = None, due_date: Optional[str] = None, category: Optional[str] = None) -> TaskRead:
     now = utc_now_iso()
+    has_time = 1 if due_time else 0
     async with db_transaction() as conn:
         cur = await conn.execute(
             """
-            INSERT INTO tasks (session_id, title, due_time, due_date, category, completed, created_at_utc)
-            VALUES (?, ?, ?, ?, ?, 0, ?)
+            INSERT INTO tasks (session_id, title, due_time, due_date, category, completed, created_at_utc, has_time)
+            VALUES (?, ?, ?, ?, ?, 0, ?, ?)
             """,
-            (session_id, title, due_time, due_date, category, now),
+            (session_id, title, due_time, due_date, category, now, has_time),
         )
         task_id = cur.lastrowid
     return TaskRead(
@@ -323,6 +345,7 @@ async def create_task(session_id: str, title: str, due_time: Optional[str] = Non
         due_time=due_time,
         due_date=due_date,
         category=Category(category) if category else None,
+        has_time=bool(has_time),
         completed=False,
         created_at_utc=parse_utc(now),
     )
@@ -348,6 +371,7 @@ async def list_tasks_today(session_id: str, args: dict = None) -> list[TaskRead]
             due_time=row["due_time"],
             due_date=row["due_date"],
             category=Category(row["category"]) if row["category"] else None,
+            has_time=bool(row["has_time"]) if "has_time" in row.keys() else True,
             completed=bool(row["completed"]),
             created_at_utc=parse_utc(row["created_at_utc"]),
         )
@@ -490,6 +514,7 @@ async def create_calendar_block(
     start_utc: str,
     end_utc: str,
     category: Category = Category.ESTUDIO,
+    has_time: bool = True,
 ) -> CalendarBlockRead:
     async with db_transaction() as conn:
         # Verificar solapamiento
@@ -506,10 +531,10 @@ async def create_calendar_block(
             raise ValueError("El bloque se solapa con uno existente")
         cur = await conn.execute(
             """
-            INSERT INTO calendar_blocks (session_id, title, start_utc, end_utc, category)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO calendar_blocks (session_id, title, start_utc, end_utc, category, has_time)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (session_id, title, start_utc, end_utc, category.value),
+            (session_id, title, start_utc, end_utc, category.value, int(has_time)),
         )
         block_id = cur.lastrowid
     return CalendarBlockRead(
@@ -519,6 +544,7 @@ async def create_calendar_block(
         start_utc=parse_utc(start_utc),
         end_utc=parse_utc(end_utc),
         category=category,
+        has_time=has_time,
     )
 
 
@@ -551,6 +577,7 @@ async def list_blocks_today(session_id: str, args: dict = None) -> list[Calendar
             start_utc=parse_utc(row["start_utc"]),
             end_utc=parse_utc(row["end_utc"]),
             category=Category(row["category"]),
+            has_time=bool(row["has_time"]) if "has_time" in row.keys() else True,
         )
         for row in rows
     ]
@@ -577,6 +604,7 @@ async def list_upcoming_blocks(session_id: str, limit: int = 10) -> list[Calenda
             start_utc=parse_utc(row["start_utc"]),
             end_utc=parse_utc(row["end_utc"]),
             category=Category(row["category"]),
+            has_time=bool(row["has_time"]) if "has_time" in row.keys() else True,
         )
         for row in rows
     ]

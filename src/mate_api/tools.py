@@ -83,9 +83,15 @@ def _normalize_title(title: str) -> str:
 
 async def tool_crear_tarea(session_id: str, args: dict) -> ToolResult:
     """1. Crear una tarea con título, hora opcional (HH:MM), fecha opcional (YYYY-MM-DD) y categoría opcional.
-    Si ya existe una tarea con mismo título normalizado en la misma fecha, devuelve la existente."""
+    Si ya existe una tarea con mismo título normalizado en la misma fecha, devuelve la existente.
+    La hora se interpreta en zona horaria America/Argentina/Cordoba y se guarda en UTC.
+    La respuesta incluye la hora original local para mostrar al usuario."""
     try:
         validated = CrearTareaArgs(**args)
+
+        # Guardar hora local original para la respuesta
+        original_due_time = validated.hora_sugerida
+        original_due_date = validated.fecha_sugerida
 
         # Verificar duplicado por título normalizado + fecha
         if validated.fecha_sugerida:
@@ -94,7 +100,7 @@ async def tool_crear_tarea(session_id: str, args: dict) -> ToolResult:
             async with get_connection() as conn:
                 rows = await conn.execute(
                     """
-                    SELECT id, title, due_date, due_time, category, completed, created_at_utc
+                    SELECT id, title, due_date, due_time, category, completed, created_at_utc, has_time
                     FROM tasks
                     WHERE session_id = ? AND due_date = ?
                     """,
@@ -112,18 +118,50 @@ async def tool_crear_tarea(session_id: str, args: dict) -> ToolResult:
                             due_time=row["due_time"],
                             due_date=row["due_date"],
                             category=CategoryModel(row["category"]) if row["category"] else None,
+                            has_time=bool(row["has_time"]) if "has_time" in row.keys() else True,
                             completed=bool(row["completed"]),
                             created_at_utc=row["created_at_utc"],
                         ).model_dump())
 
+        # Convertir hora local Córdoba a UTC si hay hora y fecha
+        due_time = validated.hora_sugerida
+        due_date = validated.fecha_sugerida
+        has_time = False
+        if due_time and due_date:
+            # Construir datetime en zona horaria Córdoba y convertir a UTC
+            hour, minute = map(int, due_time.split(":"))
+            year, month, day = map(int, due_date.split("-"))
+            dt_cordoba = datetime(year, month, day, hour, minute, tzinfo=CORDOBA_TZ)
+            dt_utc = dt_cordoba.astimezone(timezone.utc)
+            due_time = dt_utc.strftime("%H:%M")
+            due_date = dt_utc.strftime("%Y-%m-%d")
+            has_time = True
+        elif due_time and not due_date:
+            # Si solo hay hora, usar fecha de hoy en Córdoba
+            now_cordoba = datetime.now(CORDOBA_TZ)
+            today_iso = now_cordoba.strftime("%Y-%m-%d")
+            hour, minute = map(int, due_time.split(":"))
+            dt_cordoba = datetime(now_cordoba.year, now_cordoba.month, now_cordoba.day, hour, minute, tzinfo=CORDOBA_TZ)
+            dt_utc = dt_cordoba.astimezone(timezone.utc)
+            due_time = dt_utc.strftime("%H:%M")
+            due_date = dt_utc.strftime("%Y-%m-%d")
+            has_time = True
+
         task = await create_task(
             session_id,
             validated.titulo,
-            validated.hora_sugerida,
-            validated.fecha_sugerida,
+            due_time,
+            due_date,
             validated.categoria.value if validated.categoria else None,
         )
-        return ToolResult(success=True, data=task.model_dump())
+        # Sobrescribir has_time y due_time/due_date con hora local original para respuesta
+        task_dict = task.model_dump()
+        task_dict["has_time"] = has_time
+        if original_due_time:
+            task_dict["due_time"] = original_due_time
+        if original_due_date:
+            task_dict["due_date"] = original_due_date
+        return ToolResult(success=True, data=task_dict)
     except Exception as e:
         return ToolResult(success=False, error=str(e))
 
@@ -213,7 +251,8 @@ async def tool_buscar_hueco(session_id: str, args: dict) -> ToolResult:
 
 
 async def tool_reservar_bloque(session_id: str, args: dict) -> ToolResult:
-    """6. Agenda un bloque en el calendario verificando que no se solape."""
+    """6. Agenda un bloque en el calendario verificando que no se solape.
+    inicio_iso y fin_iso deben ser ISO 8601 UTC (ej: 2026-11-23T11:00:00+00:00)."""
     try:
         validated = ReservarBloqueArgs(**args)
         cat = Category(validated.categoria)
@@ -223,6 +262,7 @@ async def tool_reservar_bloque(session_id: str, args: dict) -> ToolResult:
             validated.inicio_iso,
             validated.fin_iso,
             cat,
+            has_time=True,
         )
         return ToolResult(success=True, data=block.model_dump())
     except ValueError as e:
@@ -233,9 +273,15 @@ async def tool_reservar_bloque(session_id: str, args: dict) -> ToolResult:
 
 async def tool_crear_recordatorio(session_id: str, args: dict) -> ToolResult:
     """7. Crea un bloque tipo recordatorio y, si es evento especial, registra memoria para avisar 7 días antes.
-    Si ya existe un recordatorio con mismo título normalizado en la misma fecha, devuelve el existente."""
+    Si ya existe un recordatorio con mismo título normalizado en la misma fecha, devuelve el existente.
+    La hora se interpreta en zona horaria America/Argentina/Cordoba y se guarda en UTC.
+    La respuesta incluye la hora original local para mostrar al usuario."""
     try:
         validated = CrearRecordatorioArgs(**args)
+
+        # Guardar hora local original para la respuesta
+        original_hora = validated.hora
+        original_fecha = validated.fecha_iso
 
         # Verificar duplicado por título normalizado + fecha (en bloques tipo recordatorio)
         norm_title = _normalize_title(validated.titulo)
@@ -243,7 +289,7 @@ async def tool_crear_recordatorio(session_id: str, args: dict) -> ToolResult:
         async with get_connection() as conn:
             rows = await conn.execute(
                 """
-                SELECT id, title, start_utc, end_utc, category, completed
+                SELECT id, title, start_utc, end_utc, category, completed, has_time
                 FROM calendar_blocks
                 WHERE session_id = ? AND category = 'recordatorio'
                 """,
@@ -263,15 +309,18 @@ async def tool_crear_recordatorio(session_id: str, args: dict) -> ToolResult:
                         end_utc=row["end_utc"],
                         category=CategoryModel(row["category"]),
                         completed=bool(row["completed"]),
+                        has_time=bool(row["has_time"]) if "has_time" in row.keys() else True,
                     ).model_dump())
 
-        # Crear bloque en calendario (categoría recordatorio)
-        # Combinar fecha + hora en ISO UTC
-        inicio_iso = f"{validated.fecha_iso}T{validated.hora}:00+00:00"
+        # Convertir hora local Córdoba a UTC
+        hour, minute = map(int, validated.hora.split(":"))
+        year, month, day = map(int, validated.fecha_iso.split("-"))
+        dt_cordoba = datetime(year, month, day, hour, minute, tzinfo=CORDOBA_TZ)
+        dt_utc = dt_cordoba.astimezone(timezone.utc)
+        inicio_iso = dt_utc.isoformat(timespec="seconds")
         # Duración por defecto 30 min para recordatorios
-        inicio_dt = datetime.fromisoformat(inicio_iso.replace("Z", "+00:00"))
-        fin_dt = inicio_dt + timedelta(minutes=30)
-        fin_iso = fin_dt.isoformat()
+        fin_dt = dt_utc + timedelta(minutes=30)
+        fin_iso = fin_dt.isoformat(timespec="seconds")
 
         block = await create_calendar_block(
             session_id,
@@ -279,7 +328,12 @@ async def tool_crear_recordatorio(session_id: str, args: dict) -> ToolResult:
             inicio_iso,
             fin_iso,
             Category.RECORDATORIO,
+            has_time=True,
         )
+        # Sobrescribir start_utc/end_utc con hora local original para respuesta
+        block_dict = block.model_dump()
+        block_dict["start_utc"] = f"{original_fecha}T{original_hora}:00"
+        block_dict["end_utc"] = f"{original_fecha}T{original_hora}:30"
 
         # Si parece un evento especial, guardar en memoria con fecha_evento
         memory = None

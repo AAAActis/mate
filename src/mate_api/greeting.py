@@ -22,6 +22,7 @@ async def build_greeting(
     memories: list,
     now: datetime,
     tone: str = "amable",
+    tone_mode: str = "automatico",
 ) -> dict:
     """Construye el saludo usando el LLM con prompt corto.
 
@@ -100,7 +101,7 @@ Tono: {tone} (amable = cálido, firme = directo).
     try:
         # Usar el agente para generar el saludo
         if session_id:
-            agent = get_agent(session_id, Tone(tone))
+            agent = get_agent(session_id, Tone(tone), Tone(tone_mode))
             # Construir mensajes mínimos para el saludo
             messages = [
                 {"role": "system", "content": agent._get_system_prompt()},

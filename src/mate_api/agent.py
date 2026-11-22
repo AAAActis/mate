@@ -491,15 +491,16 @@ class RuleBasedFallbackAgent:
 class MateAgent:
     """Agente principal: LLM + Tool Calling (máx 4) + Fallback."""
 
-    def __init__(self, session_id: str, tone: Tone):
+    def __init__(self, session_id: str, tone: Tone, tone_mode: Tone = Tone.AUTOMATICO):
         self.session_id = session_id
         self.tone = tone
+        self.tone_mode = tone_mode
         self.llm = LLMClient()
         self.fallback = RuleBasedFallbackAgent(session_id, tone)
         self.tool_calls_this_turn = 0
 
     def _get_system_prompt(self) -> str:
-        return get_system_prompt(self.tone.value)
+        return get_system_prompt(self.tone.value, self.tone_mode.value)
 
     async def _build_messages(self, user_message: str, history: List[Dict[str, str]]) -> List[Dict[str, Any]]:
         """Contexto por turno (§5.2): system + <memoria> + <agenda> + fecha/hora + <dias>, últimos 12 mensajes, <user_data>."""
@@ -761,12 +762,24 @@ class MateAgent:
         if not final_content:
             final_content = "Listo. ¿Algo más?"
 
-        # Determinar avatar_state basado en tools ejecutadas
+        # Extraer tono usado del response (marca [tono:amable] o [tono:firme] al inicio)
+        tone_used = None
+        tone_prefix_pattern = r"^\[tono:(amable|firme)\]\s*"
+        import re
+        match = re.match(tone_prefix_pattern, final_content.strip())
+        if match:
+            tone_used = match.group(1)
+            final_content = re.sub(tone_prefix_pattern, "", final_content, count=1).lstrip()
+
+        # Determinar avatar_state y tone_used basado en tools ejecutadas y tono
         if tools_executed:
             if all(t.success for t in tools_executed):
                 avatar_state = AvatarState.CONTENTO
             elif any(not t.success for t in tools_executed):
                 avatar_state = AvatarState.SERIO
+        elif tone_used:
+            # Sin tools: avatar_state según tono
+            avatar_state = AvatarState.SERIO if tone_used == "firme" else AvatarState.HABLANDO
 
         return ChatResponse(
             reply=final_content,
@@ -774,6 +787,7 @@ class MateAgent:
             tools_executed=tools_executed,
             state_snapshot={},
             is_degraded=False,
+            tone_used=tone_used,
         )
 
     def _make_json_serializable(self, obj: Any) -> Any:
@@ -800,9 +814,9 @@ class MateAgent:
 _agent_cache: dict[str, MateAgent] = {}
 
 
-def get_agent(session_id: str, tone: Tone = Tone.AMABLE) -> MateAgent:
+def get_agent(session_id: str, tone: Tone = Tone.AMABLE, tone_mode: Tone = Tone.AUTOMATICO) -> MateAgent:
     """Obtiene o crea un agente para la sesión."""
-    cache_key = f"{session_id}:{tone.value}"
+    cache_key = f"{session_id}:{tone.value}:{tone_mode.value}"
     if cache_key not in _agent_cache:
-        _agent_cache[cache_key] = MateAgent(session_id, tone)
+        _agent_cache[cache_key] = MateAgent(session_id, tone, tone_mode)
     return _agent_cache[cache_key]

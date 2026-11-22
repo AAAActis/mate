@@ -28,6 +28,8 @@ from .models import (
     ChatResponse,
     ToneRequest,
     ToneResponse,
+    ToneModeRequest,
+    ToneModeResponse,
     ProactiveTriggerRequest,
     ProactiveTriggerResponse,
     SessionStateSnapshot,
@@ -43,6 +45,7 @@ from .database import (
     get_session_by_ics_token,
     get_full_session_state,
     update_session_tone,
+    update_session_tone_mode,
     rotate_ics_token,
     delete_session,
     purge_expired_sessions,
@@ -539,7 +542,8 @@ async def get_session_state(
     from .database import get_session as get_db_session
     db_session = await get_db_session(session_id)
     session_tone = Tone(db_session.tone) if db_session else Tone.AMABLE
-    greeting = await build_greeting(db_session, habits, blocks, memories, now, session_tone) if db_session else None
+    session_tone_mode = Tone(db_session.tone_mode) if db_session else Tone.AUTOMATICO
+    greeting = await build_greeting(db_session, habits, blocks, memories, now, session_tone, session_tone_mode) if db_session else None
     display_name = db_session.display_name if db_session else None
 
     # Evitar duplicar el saludo en messages al recargar la página.
@@ -604,10 +608,11 @@ async def chat_endpoint(
     # El tono vive en la sesión: "amable" vs "firme"
     session = await get_session(session_id)
     tone = session.tone if session else Tone.AMABLE
+    tone_mode = session.tone_mode if session else Tone.AUTOMATICO
 
     if quota_remaining <= 0:
         # Modo degradado por presupuesto agotado
-        agent = get_agent(session_id, tone)
+        agent = get_agent(session_id, tone, tone_mode)
         fallback_response = await agent.fallback.handle(chat_req.message)
         # Guardar el mensaje del usuario y la respuesta degradada en messages
         await create_message(session_id, "user", chat_req.message)
@@ -624,7 +629,7 @@ async def chat_endpoint(
         )
 
     # Procesar con agente
-    agent = get_agent(session_id, tone)
+    agent = get_agent(session_id, tone, tone_mode)
     # get_messages devuelve DESC; el LLM necesita orden cronológico
     history = [
         {"role": m["role"], "content": m["content"]}
@@ -669,6 +674,20 @@ async def set_tone(
     if not ok:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
     return {"tone": tone_req.tone.value}
+
+
+@app.post("/api/v1/tone/mode", response_model=ToneModeResponse)
+async def set_tone_mode(
+    request: Request,
+    response: Response,
+    tone_mode_req: ToneModeRequest,
+    session_id: str = Depends(get_or_create_session_id),
+):
+    """Cambia el modo de tono: 'automatico', 'amable' o 'firme'."""
+    ok = await update_session_tone_mode(session_id, tone_mode_req.tone_mode)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    return {"tone_mode": tone_mode_req.tone_mode.value}
 
 
 @app.post("/api/v1/items/{item_type}/{item_id}/complete")
