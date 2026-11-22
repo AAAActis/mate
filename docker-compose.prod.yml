@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   mate-api:
-    build: .
+    image: ghcr.io/aaaactis/mate:latest
     container_name: mate-api
     restart: unless-stopped
     read_only: true
