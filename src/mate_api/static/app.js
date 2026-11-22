@@ -46,15 +46,15 @@ function mostrarChips(herramientas) {
     counts[name] = (counts[name] || 0) + 1;
   }
 
-  // Human-readable names
+  // Human-readable names (neutral, no assumptions)
   const displayNames = {
-    'crear_tarea': 'Tarea creada',
-    'reservar_bloque': 'Bloque agendado',
-    'crear_habito': 'Hábito creado',
-    'guardar_dato': 'Dato guardado',
+    'crear_tarea': 'Anotado',
+    'reservar_bloque': 'Reservado',
+    'crear_habito': 'Anotado',
+    'guardar_dato': 'Guardé un dato',
     'crear_recordatorio': 'Recordatorio',
     'listar_hoy': 'Agenda',
-    'registrar_cumplimiento': 'Completado',
+    'registrar_cumplimiento': 'Listo',
     'buscar_hueco': 'Hueco encontrado'
   };
 
@@ -120,10 +120,11 @@ function getEventsForDate(dateKey) {
 
 function getCategoryColor(category) {
   const colors = {
-    'gym': '#4a7aa8',
+    'deporte': '#4a7aa8',
     'estudio': '#c0603a',
     'trabajo': '#6a8a3a',
-    'personal': '#8a6aa8',
+    'social': '#8a6aa8',
+    'personal': '#8c5832',
     'recordatorio': '#8a6aa8'
   };
   return colors[category] || '#8a6aa8';
@@ -381,7 +382,8 @@ async function completar(tipo, id) {
   const resp = await fetch(`/api/v1/items/${tipo}/${id}/complete`, { method: 'POST', credentials: 'same-origin' });
   if (!resp.ok) return;
   const data = await resp.json();
-  decir(data.message, data.avatar_state);
+  // Solo mostrar la reacción si el backend la envía; si no viene, silencio
+  if (data.message) decir(data.message, data.avatar_state);
   await cargarSesion().catch(() => {});
 }
 

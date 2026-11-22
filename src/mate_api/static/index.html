@@ -34,10 +34,9 @@
 
     <section class="side-section">
       <h2 class="side-title">Probá pedirle</h2>
-      <button class="ejemplo" data-prompt="Redactame un mail para pedirle a mi profe una prórroga">Redactame un mail para mi profe</button>
-      <button class="ejemplo" data-prompt="¿Qué me pongo para una entrevista de trabajo informal?">¿Qué me pongo para una entrevista?</button>
-      <button class="ejemplo" data-prompt="Explicame qué es una clave foránea con un ejemplo">Explicame una clave foránea</button>
-      <button class="ejemplo" data-prompt="Motivame para ir al gym hoy">Motivame para ir al gym</button>
+      <button class="ejemplo" data-prompt="Organizá mi día">Organizar mi día</button>
+      <button class="ejemplo" data-prompt="Mostrame mi semana">Ver mi semana</button>
+      <button class="ejemplo" data-prompt="Ayudame a redactar algo">Ayudame a redactar algo</button>
     </section>
 
     <section class="side-section">
@@ -217,10 +216,12 @@
 
         <!-- Category legend -->
         <div class="calendario-leyenda" aria-label="Leyenda de categorías">
-          <span class="leyenda-item"><span class="leyenda-color" style="background:#4a7aa8"></span>Gym</span>
+          <span class="leyenda-item"><span class="leyenda-color" style="background:#4a7aa8"></span>Deporte</span>
           <span class="leyenda-item"><span class="leyenda-color" style="background:#c0603a"></span>Estudio</span>
           <span class="leyenda-item"><span class="leyenda-color" style="background:#6a8a3a"></span>Trabajo</span>
-          <span class="leyenda-item"><span class="leyenda-color" style="background:#8a6aa8"></span>Personal</span>
+          <span class="leyenda-item"><span class="leyenda-color" style="background:#8a6aa8"></span>Social</span>
+          <span class="leyenda-item"><span class="leyenda-color" style="background:#8c5832"></span>Personal</span>
+          <span class="leyenda-item"><span class="leyenda-color" style="background:#8a6aa8"></span>Recordatorio</span>
         </div>
       </aside>
     </div>
@@ -228,19 +229,15 @@
     <section class="tarjetas" aria-label="Accesos rápidos">
       <button class="tarjeta card" data-prompt="Listá qué tengo para hoy, buscame un hueco libre de 1 hora y ayudame a organizar el día">
         <svg class="icon" viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="13" rx="2"/><path d="M3 8h14M7 2.5v3M13 2.5v3"/></svg>
-        <span>Planificar mi día</span>
+        <span>Organizar mi día</span>
       </button>
-      <button class="tarjeta card" data-prompt="Agendame un bloque de estudio de Bases de Datos hoy a las 16:00 hs y creá el hábito de estudiar 3 veces por semana">
+      <button class="tarjeta card" data-prompt="Mostrame mi semana completa con todo lo que tengo agendado">
         <svg class="icon" viewBox="0 0 20 20"><path d="M3 4.5h5a2 2 0 0 1 2 2V16a1.5 1.5 0 0 0-1.5-1.5H3zM17 4.5h-5a2 2 0 0 0-2 2V16a1.5 1.5 0 0 1 1.5-1.5H17z"/></svg>
-        <span>Agendar estudio</span>
+        <span>Ver mi semana</span>
       </button>
-      <button class="tarjeta card" data-prompt="Quiero ir al gym 3 veces por semana a las 19:00 hs y anotar que hoy ya cumplí">
+      <button class="tarjeta card" data-prompt="Ayudame a redactar algo: un mail, un mensaje, lo que necesites">
         <svg class="icon" viewBox="0 0 20 20"><path d="M2.5 10h15M5 7v6M15 7v6M3 8.5v3M17 8.5v3"/></svg>
-        <span>Registrar mi gym</span>
-      </button>
-      <button class="tarjeta card" data-prompt="El cumpleaños de mi novia es en 6 días, guardalo en tu memoria y creá un recordatorio">
-        <svg class="icon" viewBox="0 0 20 20"><path d="M10 3a4.5 4.5 0 0 0-4.5 4.5c0 4-1.5 5.5-1.5 5.5h12s-1.5-1.5-1.5-5.5A4.5 4.5 0 0 0 10 3zM8.5 16a1.5 1.5 0 0 0 3 0"/></svg>
-        <span>Guardar recordatorio</span>
+        <span>Ayudame a redactar</span>
       </button>
     </section>
 
@@ -257,9 +254,7 @@
     <h2>Panel de ingeniería</h2>
     <p>Simulá avisos proactivos por SSE.</p>
     <div class="dialog-acciones">
-      <button class="btn" data-scenario="gym">Aviso gym</button>
-      <button class="btn" data-scenario="estudio">Aviso estudio</button>
-      <button class="btn" data-scenario="cumple">Aviso cumple</button>
+      <button class="btn" data-scenario="proximo_evento">Próximo evento</button>
     </div>
     <form method="dialog"><button class="btn">Cerrar</button></form>
   </dialog>
