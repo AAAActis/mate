@@ -108,7 +108,7 @@ class TestBolaHttp:
         # Crear hábito en sesión B
         resp_b = await client.post(
             "/api/v1/chat",
-            json={"message": "Crear hábito gym 3 veces"},
+            json={"message": "Crear hábito correr 3 veces por semana a las 19:00"},
             cookies={"mate_sid": session_b},
         )
         assert resp_b.status_code == 200
@@ -254,9 +254,9 @@ class TestDeleteSession:
 
     async def test_delete_session_removes_all_data(self, client, session_a):
         """DELETE /api/v1/session borra todo y crea sesión nueva."""
-        # Crear algunos datos (usando keywords que el fallback detecta)
+        # Crear algunos datos
         await client.post("/api/v1/chat", json={"message": "Crear tarea para borrar"}, cookies={"mate_sid": session_a})
-        await client.post("/api/v1/chat", json={"message": "Crear hábito gym 3 veces"}, cookies={"mate_sid": session_a})
+        await client.post("/api/v1/chat", json={"message": "Crear hábito correr 3 veces por semana a las 19:00"}, cookies={"mate_sid": session_a})
 
         state_before = await client.get("/api/v1/session", cookies={"mate_sid": session_a})
         assert len(state_before.json().get("tasks", [])) > 0

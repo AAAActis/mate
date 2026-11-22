@@ -43,21 +43,40 @@ async def build_greeting(
     # Formatear agenda resumida
     agenda_lines = []
     for h in habits:
-        agenda_lines.append(f"- Hábito {h.get('name', '')}: {h.get('done_this_week', 0)}/{h.get('target_per_week', 3)} esta semana a las {h.get('preferred_time', '19:00')}")
+        # Handle both pydantic models and dicts
+        if hasattr(h, 'model_dump'):
+            h_dict = h.model_dump()
+        elif hasattr(h, 'dict'):
+            h_dict = h.dict()
+        else:
+            h_dict = h
+        agenda_lines.append(f"- Hábito {h_dict.get('name', '')}: {h_dict.get('done_this_week', 0)}/{h_dict.get('target_per_week', 3)} esta semana a las {h_dict.get('preferred_time', '19:00')}")
 
     today = now.date()
     for b in blocks:
-        start = _parse_iso(b.get("start_utc", ""))
+        if hasattr(b, 'model_dump'):
+            b_dict = b.model_dump()
+        elif hasattr(b, 'dict'):
+            b_dict = b.dict()
+        else:
+            b_dict = b
+        start = _parse_iso(b_dict.get("start_utc", ""))
         if start is None:
             continue
         delta = (start.date() - today).days
         if not 0 <= delta <= 7:
             continue
         etiqueta = "hoy" if delta == 0 else "mañana" if delta == 1 else f"en {delta} días"
-        agenda_lines.append(f"- {b.get('title', '')} ({etiqueta} a las {start.strftime('%H:%M')} hs)")
+        agenda_lines.append(f"- {b_dict.get('title', '')} ({etiqueta} a las {start.strftime('%H:%M')} hs)")
 
     for m in memories[:7]:
-        agenda_lines.append(f"- Recordatorio: {m.get('fact_value', '')} ({m.get('event_date', '')})")
+        if hasattr(m, 'model_dump'):
+            m_dict = m.model_dump()
+        elif hasattr(m, 'dict'):
+            m_dict = m.dict()
+        else:
+            m_dict = m
+        agenda_lines.append(f"- Recordatorio: {m_dict.get('fact_value', '')} ({m_dict.get('event_date', '')})")
 
     agenda_text = "\n".join(agenda_lines) if agenda_lines else "(sin nada agendado)"
 

@@ -392,10 +392,12 @@ body {
   width: 4px;
   border-radius: 12px 0 0 12px;
 }
-.item-dia.gym::before { background: #4a7aa8; }
+.item-dia.deporte::before { background: #4a7aa8; }
 .item-dia.estudio::before { background: #c0603a; }
 .item-dia.trabajo::before { background: #6a8a3a; }
-.item-dia.personal::before { background: #8a6aa8; }
+.item-dia.social::before { background: #8a6aa8; }
+.item-dia.personal::before { background: #8c5832; }
+.item-dia.recordatorio::before { background: #8a6aa8; }
 .item-dia.hecho { opacity: 0.6; }
 .item-dia.hecho .item-dia-titulo { text-decoration: line-through; color: var(--text-muted); }
 .item-dia.hecho .item-dia-hora { color: var(--text-muted); }

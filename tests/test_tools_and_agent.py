@@ -176,7 +176,7 @@ class TestTools:
             "titulo": "Bloque 2",
             "inicio_iso": inicio,
             "fin_iso": fin,
-            "categoria": "gym",
+            "categoria": "deporte",
         })
         assert result.success is False
         assert "solapa" in result.error.lower()
@@ -192,16 +192,16 @@ class TestTools:
         assert result.data["block"]["title"] == "Reunión importante"
         assert result.data["block"]["category"] == "recordatorio"
 
-    async def test_crear_recordatorio_cumple_genera_memoria(self, session_fixture):
+    async def test_crear_recordatorio_aniversario_genera_memoria(self, session_fixture):
         tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
         result = await tool_crear_recordatorio(session_fixture, {
-            "titulo": "Cumpleaños de mamá",
+            "titulo": "Aniversario de mamá",
             "fecha_iso": tomorrow,
             "hora": "09:00",
         })
         assert result.success is True
         assert result.data["memory"] is not None
-        assert "cumpleaños" in result.data["memory"]["fact_value"].lower()
+        assert "aniversario" in result.data["memory"]["fact_value"].lower()
 
     async def test_guardar_dato(self, session_fixture):
         result = await tool_guardar_dato(session_fixture, {
@@ -242,20 +242,33 @@ class TestAgent:
         assert "Tarea test" in response.reply or "tarea" in response.reply.lower()
         assert response.avatar_state in ["neutro", "hablando", "contento", "serio"]
 
-    async def test_fallback_gym_motivation(self, session_fixture, agent):
+    async def test_fallback_unrecognized_intent_neutral(self, session_fixture, agent):
+        """Pedidos no reconocidos en modo degradado devuelven mensaje neutro sin gym/cumple."""
         response = await agent.process("Hoy voy al gym", [])
         assert response.is_degraded is True
-        assert response.avatar_state in ["hablando", "contento", "serio"]
+        assert "gym" not in response.reply.lower()
+        assert "gimnasio" not in response.reply.lower()
+        assert "cumple" not in response.reply.lower()
+        assert "bien ahí" not in response.reply.lower()
+        assert "bien ahi" not in response.reply.lower()
 
-    async def test_fallback_estudio_sugiere_hueco(self, session_fixture, agent):
+    async def test_fallback_unrecognized_intent_estudio(self, session_fixture, agent):
+        """Pedidos no reconocidos en modo degradado devuelven mensaje neutro."""
         response = await agent.process("Quiero estudiar Python", [])
         assert response.is_degraded is True
+        assert "gym" not in response.reply.lower()
+        assert "gimnasio" not in response.reply.lower()
+        assert "cumple" not in response.reply.lower()
 
-    async def test_fallback_cumple(self, session_fixture, agent):
+    async def test_fallback_unrecognized_intent_cumple(self, session_fixture, agent):
+        """Pedidos no reconocidos en modo degradado devuelven mensaje neutro."""
         response = await agent.process("El sábado es el cumple de mi novia", [])
         assert response.is_degraded is True
-        # La respuesta de _reply_birthday menciona "agendo con aviso de 7 días"
-        assert "agendo" in response.reply.lower() or "cumple" in response.reply.lower() or "regal" in response.reply.lower()
+        assert "gym" not in response.reply.lower()
+        assert "gimnasio" not in response.reply.lower()
+        assert "cumple" not in response.reply.lower()
+        assert "bien ahí" not in response.reply.lower()
+        assert "bien ahi" not in response.reply.lower()
 
     async def test_max_tool_calls_limit(self):
         """Verifica que el agente respeta MAX_TOOL_CALLS_PER_TURN = 4."""

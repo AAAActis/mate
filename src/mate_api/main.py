@@ -957,7 +957,6 @@ async def delete_session_endpoint(
     new_session_id = secrets.token_urlsafe(32)
     new_ics_token = secrets.token_urlsafe(32)
     await create_session(new_session_id, new_ics_token)
-    await seed_demo_events(new_session_id)
 
     response.set_cookie(
         key=SESSION_COOKIE_NAME,

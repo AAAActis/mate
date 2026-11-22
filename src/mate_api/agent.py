@@ -280,11 +280,11 @@ class RuleBasedFallbackAgent:
         if any(kw in text_lower for kw in self.HABIT_CREATE_KEYWORDS):
             return "crear_habito"
 
-        if any(kw in text_lower for kw in self.CHECKIN_KEYWORDS):
-            return "checkin"
-
         if any(kw in text_lower for kw in self.TODAY_KEYWORDS):
             return "listar_hoy"
+
+        if any(kw in text_lower for kw in self.CHECKIN_KEYWORDS):
+            return "checkin"
 
         if any(kw in text_lower for kw in self.SCHEDULE_KEYWORDS):
             return "schedule"
